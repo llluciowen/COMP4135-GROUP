@@ -49,6 +49,10 @@ VALID_EVENT_NAMES = {
     'onboarding_completed',
     'like_toggled',
     'clean_all',
+    'async_refresh',
+    'sort_changed',
+    'rating_modal_saved',
+    'filter_changed',
 }
 
 
@@ -124,6 +128,65 @@ def log_experiment_event(event_name, payload):
         return
 
 
+def get_active_algo_variant():
+    cookie_variant = normalize_variant(request.cookies.get('algo_variant'), ALGO_VARIANTS)
+    if cookie_variant:
+        return cookie_variant
+    return ALGO_VARIANTS[0]
+
+
+def build_explain_cards(user_genres, user_rates, user_likes, ui_variant, algo_variant):
+    selected_genre_names = []
+    if len(user_genres) > 0:
+        selected_ids = {int(genre_id) for genre_id in user_genres if str(genre_id).isdigit()}
+        selected_genre_names = genres[genres['id'].isin(selected_ids)]['name'].tolist()
+
+    if algo_variant == 'B':
+        recommendation_logic = 'Primary ranking uses MF (SVD), and similar-items use TF-IDF text vectors.'
+    else:
+        recommendation_logic = 'Primary ranking uses user-based k-NN, and similar-items use genre multi-hot vectors.'
+
+    genre_summary = ', '.join(selected_genre_names[:5]) if selected_genre_names else 'No genres selected yet'
+
+    return [
+        {
+            'title': 'Why You See These Results',
+            'body': recommendation_logic,
+        },
+        {
+            'title': 'Profile Snapshot',
+            'body': f"Genres: {len(user_genres)} | Ratings: {len(user_rates)} | Likes: {len(user_likes)}",
+        },
+        {
+            'title': 'Current Focus Genres',
+            'body': genre_summary,
+        },
+        {
+            'title': 'Experiment Context',
+            'body': f"UI {ui_variant} with algorithm variant {algo_variant}.",
+        },
+    ]
+
+
+def compute_recommendation_payload(user_genres, user_rates, user_likes, ui_variant, algo_variant):
+    default_genres_movies = getMoviesByGenres(user_genres)[:10]
+    recommendations_movies, recommendations_message = getRecommendationBy(user_rates, algo_variant=algo_variant)
+
+    liked_movie_ids = [int(raw_id) for raw_id in user_likes if str(raw_id).isdigit()]
+    likes_similar_movies, likes_similar_message = getLikedSimilarBy(liked_movie_ids, algo_variant=algo_variant)
+    likes_movies = getUserLikesBy(user_likes)
+
+    return {
+        'default_genres_movies': default_genres_movies,
+        'recommendations': recommendations_movies,
+        'recommendations_message': recommendations_message,
+        'likes_similars': likes_similar_movies,
+        'likes_similar_message': likes_similar_message,
+        'likes': likes_movies,
+        'explain_cards': build_explain_cards(user_genres, user_rates, user_likes, ui_variant, algo_variant),
+    }
+
+
 @bp.route('/event', methods=('POST',))
 def event():
     payload = request.get_json(silent=True) or {}
@@ -140,6 +203,10 @@ def event():
         'ui_variant': ui_variant,
         'algo_variant': algo_variant,
         'ab_seed': user_seed,
+        'section': payload.get('section'),
+        'sort_key': payload.get('sort_key'),
+        'filter_key': payload.get('filter_key'),
+        'filter_value': payload.get('filter_value'),
         'movie_id': coerce_int(payload.get('movie_id')),
         'rating': coerce_float(payload.get('rating')),
         'likes_count': coerce_int(payload.get('likes_count')),
@@ -151,6 +218,41 @@ def event():
 
     log_experiment_event(event_name, event_payload)
     return {'status': 'ok'}, 200
+
+
+@bp.route('/api/recommendations', methods=('POST',))
+def recommendations_api():
+    payload = request.get_json(silent=True) or {}
+
+    raw_genres = payload.get('user_genres', split_cookie_values(request.cookies.get('user_genres')))
+    raw_rates = payload.get('user_rates', split_cookie_values(request.cookies.get('user_rates')))
+    raw_likes = payload.get('user_likes', split_cookie_values(request.cookies.get('user_likes')))
+
+    user_genres = [str(value) for value in raw_genres if str(value) != '']
+    user_rates = [str(value) for value in raw_rates if str(value) != '']
+    user_likes = [str(value) for value in raw_likes if str(value) != '']
+
+    ui_variant = normalize_variant(payload.get('ui_variant'), UI_VARIANTS)
+    if ui_variant is None:
+        ui_variant = normalize_variant(request.cookies.get('ui_variant'), UI_VARIANTS) or UI_VARIANTS[0]
+
+    algo_variant = normalize_variant(payload.get('algo_variant'), ALGO_VARIANTS)
+    if algo_variant is None:
+        algo_variant = get_active_algo_variant()
+
+    result_payload = compute_recommendation_payload(user_genres, user_rates, user_likes, ui_variant, algo_variant)
+    result_payload['rating_threshold'] = RATING_THRESHOLD_BY_UI.get(ui_variant, 10)
+
+    log_experiment_event('async_refresh', {
+        'ui_variant': ui_variant,
+        'algo_variant': algo_variant,
+        'genres_count': len(user_genres),
+        'ratings_count': len(user_rates),
+        'likes_count': len(user_likes),
+        'rating_threshold': result_payload['rating_threshold'],
+    })
+
+    return result_payload, 200
 
 
 @bp.route('/', methods=('GET', 'POST'))
@@ -168,12 +270,7 @@ def index():
                                                                 user_seed, ALGO_VARIANTS)
     rating_threshold = RATING_THRESHOLD_BY_UI.get(ui_variant, 10)
 
-    default_genres_movies = getMoviesByGenres(user_genres)[:10]
-    recommendations_movies, recommendations_message = getRecommendationBy(user_rates, algo_variant=algo_variant)
-
-    liked_movie_ids = [int(raw_id) for raw_id in user_likes if raw_id.isdigit()]
-    likes_similar_movies, likes_similar_message = getLikedSimilarBy(liked_movie_ids, algo_variant=algo_variant)
-    likes_movies = getUserLikesBy(user_likes)
+    page_payload = compute_recommendation_payload(user_genres, user_rates, user_likes, ui_variant, algo_variant)
 
     log_experiment_event('page_view', {
         'ui_variant': ui_variant,
@@ -190,12 +287,13 @@ def index():
                                              user_genres=user_genres,
                                              user_rates=user_rates,
                                              user_likes=user_likes,
-                                             default_genres_movies=default_genres_movies,
-                                             recommendations=recommendations_movies,
-                                             recommendations_message=recommendations_message,
-                                             likes_similars=likes_similar_movies,
-                                             likes_similar_message=likes_similar_message,
-                                             likes=likes_movies,
+                                             default_genres_movies=page_payload['default_genres_movies'],
+                                             recommendations=page_payload['recommendations'],
+                                             recommendations_message=page_payload['recommendations_message'],
+                                             likes_similars=page_payload['likes_similars'],
+                                             likes_similar_message=page_payload['likes_similar_message'],
+                                             likes=page_payload['likes'],
+                                             explain_cards=page_payload['explain_cards'],
                                              ui_variant=ui_variant,
                                              ui_variant_label=UI_VARIANT_LABELS[ui_variant],
                                              algo_variant=algo_variant,

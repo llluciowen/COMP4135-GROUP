@@ -24,7 +24,11 @@ flask --app flaskr run --debug
 This demo now supports stable A/B assignment using cookies.
 
 - UI Variant A: original UI, rating threshold = 10
-- UI Variant B: improved UI with onboarding progress, rating threshold = 5
+- UI Variant B: improved UI with onboarding progress, rating threshold = 5,
+  async partial refresh (no full-page reload for like/rating save), explanation cards,
+    sorting controls for recommendation panels, filter toolbar
+    (search/min-year/min-score/min-similarity), and tabbed sections
+    (recommended/similar/liked)
 - Algo Variant A: user-based k-NN (KNNWithMeans) + genre multi-hot content
 - Algo Variant B: MF (SVD) + TF-IDF content
 

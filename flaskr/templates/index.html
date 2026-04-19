@@ -6,6 +6,9 @@
     <title>Movie Recommender System</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
 <div id="app">
@@ -92,136 +95,424 @@
         </template>
 
         <template v-if="genres.length > 0 && userRates.length >= ratingThreshold">
-            {% if recommendations %}
-            <section class="section pt-2 pb-0">
-                <div class="container">
-                    <p class="is-size-4">
-                        Recommended
-                    </p>
-                    <p class="mb-3">{{ recommendations_message }}</p>
+            <template v-if="uiVariant !== 'B'">
+                {% if recommendations %}
+                <section class="section pt-2 pb-0">
+                    <div class="container">
+                        <p class="is-size-4">
+                            Recommended
+                        </p>
+                        <p class="mb-3">{{ recommendations_message }}</p>
 
-                    <div class="columns is-mobile is-multiline">
-                        {% for movie in recommendations %}
-                        <div class="column is-3-fullhd is-3-desktop is-3-tablet is-6-mobile">
-                            <div class="card">
-                                <div class="card-image">
-                                    <figure class="image is-4by3">
-                                        <img src="{{ movie['cover_url'] }}"
-                                             onerror="this.src='https://placehold.co/480x640?text=No+Cover';"
-                                             alt="">
-                                    </figure>
-                                </div>
-                                <div class="card-content p-2">
-                                    <div class="media">
-                                        <div class="media-content">
-                                            <p style="font-size: 0.8rem; font-weight: bold">{{ movie['title']
-                                                }}</p>
-                                            <p style="font-size: 0.8rem">{{ movie['release_date'] }}</p>
-                                            {% if 'score' in movie %}
-                                            <p style="font-size: 0.75rem">Predicted score: {{ "%.2f"|format(movie['score']) }}</p>
-                                            {% endif %}
+                        <div class="columns is-mobile is-multiline">
+                            {% for movie in recommendations %}
+                            <div class="column is-3-fullhd is-3-desktop is-3-tablet is-6-mobile">
+                                <div class="card">
+                                    <div class="card-image">
+                                        <figure class="image is-4by3">
+                                            <img src="{{ movie['cover_url'] }}"
+                                                 onerror="this.src='https://placehold.co/480x640?text=No+Cover';"
+                                                 alt="">
+                                        </figure>
+                                    </div>
+                                    <div class="card-content p-2">
+                                        <div class="media">
+                                            <div class="media-content">
+                                                <p style="font-size: 0.8rem; font-weight: bold">{{ movie['title']
+                                                    }}</p>
+                                                <p style="font-size: 0.8rem">{{ movie['release_date'] }}</p>
+                                                {% if 'score' in movie %}
+                                                <p style="font-size: 0.75rem">Predicted score: {{ "%.2f"|format(movie['score']) }}</p>
+                                                {% endif %}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
 
-                                <div class="card-footer p-2">
-                                    <button class="button is-small" @click="updateLike({{movie['movieId']}})">
-                                        <span :class="['fa fa-thumbs-up', inLikes({{movie['movieId']}}) ? 'checked': '']" > Like</span>
-                                    </button>
+                                    <div class="card-footer p-2">
+                                        <button class="button is-small" @click="updateLike({{movie['movieId']}})">
+                                            <span :class="['fa fa-thumbs-up', inLikes({{movie['movieId']}}) ? 'checked': '']" > Like</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </section>
+                {% endif %}
+
+                {% if likes_similars %}
+                <section class="section pb-0">
+                    <div class="container">
+                        <p class="is-size-4">
+                            Liked with Similar Items
+                        </p>
+                        <p class="mb-3">{{ likes_similar_message }}</p>
+
+                        <div class="columns is-mobile is-multiline">
+                            {% for movie in likes_similars %}
+                            <div class="column is-2-fullhd is-2-desktop is-2-tablet is-6-mobile">
+                                <div class="card">
+                                    <div class="card-image">
+                                        <figure class="image is-3by4">
+                                            <img src="{{ movie['cover_url'] }}"
+                                                 onerror="this.src='https://placehold.co/480x640?text=No+Cover';"
+                                                 alt="">
+                                        </figure>
+                                    </div>
+                                    <div class="card-content p-2">
+                                        <div class="media">
+                                            <div class="media-content">
+                                                <p style="font-size: 0.8rem; font-weight: bold">{{ movie['title']
+                                                    }}</p>
+                                                <p style="font-size: 0.8rem">{{ movie['release_date'] }}</p>
+                                                {% if 'similarity' in movie %}
+                                                <p style="font-size: 0.75rem">Similarity: {{ "%.3f"|format(movie['similarity']) }}</p>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="card-footer p-2">
+                                        <button class="button is-small" @click="updateLike({{movie['movieId']}})">
+                                            <span :class="['fa fa-thumbs-up', inLikes({{movie['movieId']}}) ? 'checked': '']" > Like</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </section>
+                {% endif %}
+
+                {% if likes %}
+                <section class="section pb-0">
+                    <div class="container">
+                        <p class="is-size-4 mb-3">
+                            Liked <button class="button" @click="reloadPage"><i class="fa fa-refresh mr-3" aria-hidden="true"></i>Refresh</button>
+                        </p>
+
+                        <div class="columns is-mobile pb-3" style="overflow: scroll">
+                            {% for movie in likes %}
+                            <div class="column is-2-fullhd is-2-desktop is-2-tablet is-6-mobile">
+                                <div class="card">
+                                    <div class="card-image">
+                                        <figure class="image is-3by4">
+                                            <img src="{{ movie['cover_url'] }}"
+                                                 onerror="this.src='https://placehold.co/480x640?text=No+Cover';"
+                                                 alt="">
+                                        </figure>
+                                    </div>
+                                    <div class="card-content p-2">
+                                        <div class="media">
+                                            <div class="media-content">
+                                                <p style="font-size: 0.8rem; font-weight: bold">{{ movie['title']
+                                                    }}</p>
+                                                <p style="font-size: 0.8rem">{{ movie['release_date'] }}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="card-footer p-2">
+                                        <button class="button is-small" @click="updateLike({{movie['movieId']}})">
+                                            <span :class="['fa fa-thumbs-up', inLikes({{movie['movieId']}}) ? 'checked': '']" > Like</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </section>
+                {% endif %}
+            </template>
+
+            <template v-else>
+                <div class="ui-b-shell">
+                <section class="section ui-b-section ui-b-section-intro">
+                    <div class="container">
+                        <div class="columns is-multiline">
+                            <div class="column is-6" v-for="(card, idx) in explainCards" :key="'explain-' + idx">
+                                <div class="ui-b-explanation">
+                                    <div class="ui-b-explanation-header">
+                                        <p><span class="icon mr-2"><i class="fa fa-lightbulb-o"></i></span> [[ card.title ]]</p>
+                                    </div>
+                                    <div class="ui-b-explanation-body">
+                                        [[ card.body ]]
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        {% endfor %}
                     </div>
-                </div>
-            </section>
-            {% endif %}
+                </section>
 
-            {% if likes_similars %}
-            <section class="section pb-0">
-                <div class="container">
-                    <p class="is-size-4">
-                        Liked with Similar Items
-                    </p>
-                    <p class="mb-3">{{ likes_similar_message }}</p>
-
-                    <div class="columns is-mobile is-multiline">
-                        {% for movie in likes_similars %}
-                        <div class="column is-2-fullhd is-2-desktop is-2-tablet is-6-mobile">
-                            <div class="card">
-                                <div class="card-image">
-                                    <figure class="image is-3by4">
-                                        <img src="{{ movie['cover_url'] }}"
-                                             onerror="this.src='https://placehold.co/480x640?text=No+Cover';"
-                                             alt="">
-                                    </figure>
-                                </div>
-                                <div class="card-content p-2">
-                                    <div class="media">
-                                        <div class="media-content">
-                                            <p style="font-size: 0.8rem; font-weight: bold">{{ movie['title']
-                                                }}</p>
-                                            <p style="font-size: 0.8rem">{{ movie['release_date'] }}</p>
-                                            {% if 'similarity' in movie %}
-                                            <p style="font-size: 0.75rem">Similarity: {{ "%.3f"|format(movie['similarity']) }}</p>
-                                            {% endif %}
-                                        </div>
+                <section class="section ui-b-section ui-b-section-toolbar">
+                    <div class="container">
+                        <div class="ui-b-toolbar">
+                            <div class="columns is-multiline is-variable is-4">
+                                <div class="column is-4-desktop is-12-mobile">
+                                    <label class="label ui-b-label"><i class="fa fa-search mr-2"></i>Search Title</label>
+                                    <div class="control has-icons-left">
+                                        <input class="input ui-b-input" type="text"
+                                               v-model.trim="globalSearch"
+                                               @change="onFilterChanged('search', globalSearch)"
+                                               placeholder="Search in all panels...">
+                                        <span class="icon is-left"><i class="fa fa-search"></i></span>
                                     </div>
                                 </div>
 
-                                <div class="card-footer p-2">
-                                    <button class="button is-small" @click="updateLike({{movie['movieId']}})">
-                                        <span :class="['fa fa-thumbs-up', inLikes({{movie['movieId']}}) ? 'checked': '']" > Like</span>
+                                <div class="column is-2-desktop is-6-mobile">
+                                    <label class="label ui-b-label"><i class="fa fa-calendar mr-2"></i>Min Year</label>
+                                    <input class="input ui-b-input" type="number" min="1900" max="2100"
+                                           v-model.number="minYearFilter"
+                                           @change="onFilterChanged('min_year', minYearFilter)">
+                                </div>
+
+                                <div class="column is-2-desktop is-6-mobile">
+                                    <label class="label ui-b-label"><i class="fa fa-star-o mr-2"></i>Min Score</label>
+                                    <input class="slider-control" type="range" min="0" max="5" step="0.1"
+                                           v-model.number="minScoreFilter"
+                                           @change="onFilterChanged('min_score', minScoreFilter)">
+                                    <p class="ui-b-range-val">[[ minScoreFilter.toFixed(1) ]]</p>
+                                </div>
+
+                                <div class="column is-2-desktop is-6-mobile">
+                                    <label class="label ui-b-label"><i class="fa fa-link mr-2"></i>Min Similarity</label>
+                                    <input class="slider-control" type="range" min="0" max="1" step="0.01"
+                                           v-model.number="minSimilarityFilter"
+                                           @change="onFilterChanged('min_similarity', minSimilarityFilter)">
+                                    <p class="ui-b-range-val">[[ minSimilarityFilter.toFixed(2) ]]</p>
+                                </div>
+
+                                <div class="column is-2-desktop is-12-mobile is-flex is-align-items-flex-end">
+                                    <button class="button ui-b-btn is-fullwidth" @click="resetFilters">
+                                        <span class="icon"><i class="fa fa-undo"></i></span>
+                                        <span>Reset</span>
                                     </button>
                                 </div>
                             </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </section>
-            {% endif %}
-
-            {% if likes %}
-            <section class="section pb-0">
-                <div class="container">
-                    <p class="is-size-4 mb-3">
-                        Liked <button class="button" @click="reloadPage"><i class="fa fa-refresh mr-3" aria-hidden="true"></i>Refresh</button>
-                    </p>
-
-                    <div class="columns is-mobile pb-3" style="overflow: scroll">
-                        {% for movie in likes %}
-                        <div class="column is-2-fullhd is-2-desktop is-2-tablet is-6-mobile">
-                            <div class="card">
-                                <div class="card-image">
-                                    <figure class="image is-3by4">
-                                        <img src="{{ movie['cover_url'] }}"
-                                             onerror="this.src='https://placehold.co/480x640?text=No+Cover';"
-                                             alt="">
-                                    </figure>
+                            
+                            <div class="ui-b-toolbar-footer">
+                                <div class="tags">
+                                    <span class="tag ui-b-tag"><i class="fa fa-magic mr-2"></i> [[ sortedRecommendationItems.length ]] Recommended</span>
+                                    <span class="tag ui-b-tag"><i class="fa fa-sitemap mr-2"></i> [[ sortedSimilarItems.length ]] Similar</span>
+                                    <span class="tag ui-b-tag"><i class="fa fa-heart-o mr-2"></i> [[ sortedLikedItems.length ]] Liked</span>
                                 </div>
-                                <div class="card-content p-2">
-                                    <div class="media">
-                                        <div class="media-content">
-                                            <p style="font-size: 0.8rem; font-weight: bold">{{ movie['title']
-                                                }}</p>
-                                            <p style="font-size: 0.8rem">{{ movie['release_date'] }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="section ui-b-section ui-b-section-tabs">
+                    <div class="container">
+                        <div class="tabs ui-b-tabs is-centered mb-0">
+                            <ul>
+                                <li :class="activeTab === 'recommendations' ? 'is-active' : ''">
+                                    <a @click="activeTab = 'recommendations'">
+                                        <span class="icon is-small"><i class="fa fa-magic"></i></span>
+                                        <span>Recommended</span>
+                                    </a>
+                                </li>
+                                <li :class="activeTab === 'similar' ? 'is-active' : ''">
+                                    <a @click="activeTab = 'similar'">
+                                        <span class="icon is-small"><i class="fa fa-sitemap"></i></span>
+                                        <span>Similar</span>
+                                    </a>
+                                </li>
+                                <li :class="activeTab === 'liked' ? 'is-active' : ''">
+                                    <a @click="activeTab = 'liked'">
+                                        <span class="icon is-small"><i class="fa fa-heart-o"></i></span>
+                                        <span>Liked</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="section ui-b-section ui-b-section-panel" v-show="activeTab === 'recommendations'">
+                    <div class="container">
+                        <div class="level ui-b-panel-head">
+                            <div class="level-left">
+                                <p class="ui-b-section-title"><i class="fa fa-magic"></i><span>Recommended</span></p>
+                            </div>
+                            <div class="level-right">
+                                <div class="field has-addons">
+                                    <div class="control">
+                                        <div class="select is-small ui-b-select">
+                                            <select v-model="recommendationSort" @change="onSortChanged('recommendations', recommendationSort)">
+                                                <option value="score_desc">Score: High to Low</option>
+                                                <option value="score_asc">Score: Low to High</option>
+                                                <option value="year_desc">Year: Newest First</option>
+                                                <option value="title_asc">Title: A-Z</option>
+                                            </select>
                                         </div>
                                     </div>
-                                </div>
-
-                                <div class="card-footer p-2">
-                                    <button class="button is-small" @click="updateLike({{movie['movieId']}})">
-                                        <span :class="['fa fa-thumbs-up', inLikes({{movie['movieId']}}) ? 'checked': '']" > Like</span>
-                                    </button>
+                                    <div class="control">
+                                        <button class="button is-small ui-b-btn ui-b-refresh-btn" :class="isRefreshing ? 'is-loading' : ''" @click="refreshRecommendations">
+                                            <span class="icon is-small"><i class="fa fa-refresh"></i></span>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        {% endfor %}
+                        <p class="ui-b-panel-note">[[ recommendationMessage ]]</p>
+                        <p class="ui-b-panel-meta">Showing [[ sortedRecommendationItems.length ]] items</p>
+                        <p v-if="isRefreshing" class="ui-b-panel-meta">Refreshing...</p>
+                        <div class="columns is-mobile is-multiline" v-if="sortedRecommendationItems.length > 0">
+                            <div class="column is-3-fullhd is-3-desktop is-3-tablet is-6-mobile" v-for="movie in sortedRecommendationItems" :key="'rec-' + movie.movieId">
+                                <div class="card ui-b-card">
+                                    <div class="card-image ui-b-card-image">
+                                        <figure class="image is-4by3">
+                                            <img :src="movie.cover_url"
+                                                 @error="onImageError"
+                                                 alt="">
+                                        </figure>
+                                    </div>
+                                    <div class="card-content">
+                                        <div class="media">
+                                            <div class="media-content">
+                                                <p class="has-text-weight-normal is-size-6 mb-1">[[ movie.title ]]</p>
+                                                <p class="has-text-grey is-size-7 mb-2">[[ resolveDisplayDate(movie) ]]</p>
+                                                <div class="tags are-small mb-0">
+                                                    <span class="tag ui-b-tag" v-for="genre in previewGenres(movie)" :key="'rec-genre-' + movie.movieId + '-' + genre">[[ genre ]]</span>
+                                                </div>
+                                                <div class="ui-b-card-reason">
+                                                    <p class="mb-1" v-if="movie.score !== undefined && movie.score !== null">
+                                                        <i class="fa fa-star-o mr-1"></i> [[ Number(movie.score).toFixed(2) ]]
+                                                    </p>
+                                                    <p>[[ cardReason(movie, 'recommendations') ]]</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="ui-b-card-footer">
+                                        <button class="button ui-b-btn is-fullwidth" :class="inLikes(movie.movieId) ? 'is-active-like' : ''" @click="updateLike(movie.movieId)">
+                                            <span class="icon is-small"><i :class="inLikes(movie.movieId) ? 'fa fa-heart' : 'fa fa-heart-o'"></i></span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="notification ui-b-notification" v-else>
+                            No recommendation matches current filters. Try lowering min score/year.
+                        </div>
                     </div>
+                </section>
+
+                <section class="section ui-b-section ui-b-section-panel" v-show="activeTab === 'similar'">
+                    <div class="container">
+                        <div class="level ui-b-panel-head">
+                            <div class="level-left">
+                                <p class="ui-b-section-title"><i class="fa fa-sitemap"></i><span>Liked With Similar</span></p>
+                            </div>
+                            <div class="level-right">
+                                <div class="select is-small ui-b-select">
+                                    <select v-model="similarSort" @change="onSortChanged('similar', similarSort)">
+                                        <option value="similarity_desc">Similarity: High to Low</option>
+                                        <option value="similarity_asc">Similarity: Low to High</option>
+                                        <option value="year_desc">Year: Newest First</option>
+                                        <option value="title_asc">Title: A-Z</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="ui-b-panel-note">[[ similarMessage ]]</p>
+                        <p class="ui-b-panel-meta">Showing [[ sortedSimilarItems.length ]] items</p>
+                        <div class="columns is-mobile is-multiline" v-if="sortedSimilarItems.length > 0">
+                            <div class="column is-2-fullhd is-2-desktop is-2-tablet is-6-mobile" v-for="movie in sortedSimilarItems" :key="'sim-' + movie.movieId">
+                                <div class="card ui-b-card">
+                                    <div class="card-image ui-b-card-image">
+                                        <figure class="image is-3by4">
+                                            <img :src="movie.cover_url"
+                                                 @error="onImageError"
+                                                 alt="">
+                                        </figure>
+                                    </div>
+                                    <div class="card-content">
+                                        <div class="media">
+                                            <div class="media-content">
+                                                <p class="has-text-weight-normal is-size-6 mb-1">[[ movie.title ]]</p>
+                                                <p class="has-text-grey is-size-7 mb-2">[[ resolveDisplayDate(movie) ]]</p>
+                                                <div class="tags are-small mb-0">
+                                                    <span class="tag ui-b-tag" v-for="genre in previewGenres(movie)" :key="'sim-genre-' + movie.movieId + '-' + genre">[[ genre ]]</span>
+                                                </div>
+                                                <div class="ui-b-card-reason">
+                                                    <p class="mb-1" v-if="movie.similarity !== undefined && movie.similarity !== null">
+                                                        <i class="fa fa-link mr-1"></i> [[ Number(movie.similarity).toFixed(3) ]]
+                                                    </p>
+                                                    <p>[[ cardReason(movie, 'similar') ]]</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="ui-b-card-footer">
+                                        <button class="button ui-b-btn is-fullwidth" :class="inLikes(movie.movieId) ? 'is-active-like' : ''" @click="updateLike(movie.movieId)">
+                                            <span class="icon is-small"><i :class="inLikes(movie.movieId) ? 'fa fa-heart' : 'fa fa-heart-o'"></i></span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="notification ui-b-notification" v-else>
+                            No similar-item result matches current filters.
+                        </div>
+                    </div>
+                </section>
+
+                <section class="section ui-b-section ui-b-section-panel ui-b-section-last" v-show="activeTab === 'liked'">
+                    <div class="container">
+                        <div class="level ui-b-panel-head">
+                            <div class="level-left">
+                                <p class="ui-b-section-title"><i class="fa fa-heart-o"></i><span>Liked</span></p>
+                            </div>
+                            <div class="level-right">
+                                <div class="select is-small ui-b-select">
+                                    <select v-model="likedSort" @change="onSortChanged('liked', likedSort)">
+                                        <option value="liked_order">Liked Order</option>
+                                        <option value="year_desc">Year: Newest First</option>
+                                        <option value="title_asc">Title: A-Z</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <p class="ui-b-panel-meta">Showing [[ sortedLikedItems.length ]] items</p>
+                        <div class="columns is-mobile is-multiline" v-if="sortedLikedItems.length > 0">
+                            <div class="column is-2-fullhd is-2-desktop is-2-tablet is-6-mobile" v-for="movie in sortedLikedItems" :key="'liked-' + movie.movieId">
+                                <div class="card ui-b-card">
+                                    <div class="card-image ui-b-card-image">
+                                        <figure class="image is-3by4">
+                                            <img :src="movie.cover_url"
+                                                 @error="onImageError"
+                                                 alt="">
+                                        </figure>
+                                    </div>
+                                    <div class="card-content">
+                                        <div class="media">
+                                            <div class="media-content">
+                                                <p class="has-text-weight-normal is-size-6 mb-1">[[ movie.title ]]</p>
+                                                <p class="has-text-grey is-size-7 mb-2">[[ resolveDisplayDate(movie) ]]</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="ui-b-card-footer">
+                                        <button class="button ui-b-btn is-fullwidth" :class="inLikes(movie.movieId) ? 'is-active-like' : ''" @click="updateLike(movie.movieId)">
+                                            <span class="icon is-small"><i :class="inLikes(movie.movieId) ? 'fa fa-heart' : 'fa fa-heart-o'"></i></span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="notification ui-b-notification" v-else>
+                            No liked movies match your filters.
+                        </div>
+                    </div>
+                </section>
                 </div>
-            </section>
-            {% endif %}
+            </template>
         </template>
 
         <div :class="['modal', showGenres ? 'is-active' : '']">
@@ -254,39 +545,36 @@
                 </header>
                 <div class="modal-card-body">
                     <div class="columns is-mobile is-multiline">
-                        {% for movie in default_genres_movies %}
-                        <div class="column is-3-fullhd is-3-desktop is-3-tablet is-6-mobile">
+                        <div class="column is-3-fullhd is-3-desktop is-3-tablet is-6-mobile" v-for="movie in defaultGenreMovies" :key="'rate-' + movie.movieId">
                             <div class="card">
                                 <div class="card-image">
                                     <figure class="image is-3by4">
-                                        <img src="{{ movie['cover_url'] }}"
-                                             onerror="this.src='https://placehold.co/480x640?text=No+Cover';" alt="">
+                                        <img :src="movie.cover_url"
+                                             @error="onImageError" alt="">
                                     </figure>
                                 </div>
                                 <div class="card-content p-2">
                                     <div class="media">
                                         <div class="media-content">
-                                            <p style="font-size: 0.8rem; font-weight: bold">{{ movie['title']
-                                                }}</p>
-                                            <p style="font-size: 0.8rem">{{ movie['release_date'] }}</p>
+                                            <p style="font-size: 0.8rem; font-weight: bold">[[ movie.title ]]</p>
+                                            <p style="font-size: 0.8rem">[[ resolveDisplayDate(movie) ]]</p>
                                         </div>
                                     </div>
                                 </div>
 
                                 <div class="card-footer p-2">
-                                    <template v-for="rate in [1, 2, 3, 4, 5]">
-                                        <span :class="['fa fa-star px-1 star', getRate({{movie['movieId']}})[1] >= rate ? 'checked': '']"
-                                              @click="updateRate({{movie['movieId']}}, rate)"></span>
+                                    <template v-for="rate in [1, 2, 3, 4, 5]" :key="'star-' + movie.movieId + '-' + rate">
+                                        <span :class="['fa fa-star px-1 star', getRate(movie.movieId)[1] >= rate ? 'checked': '']"
+                                              @click="updateRate(movie.movieId, rate)"></span>
                                     </template>
                                 </div>
                             </div>
                         </div>
-                        {% endfor %}
                     </div>
                 </div>
                 <footer class="modal-card-foot">
                     <button class="button is-link" :disabled="userRates.length < ratingThreshold"
-                            @click="showMovieRate = false; reloadPage()">Save
+                            @click="handleRatingSave">Save
                     </button>
                 </footer>
             </div>
@@ -311,7 +599,7 @@
 </div>
 
 <script type="module">
-    import {createApp, onMounted, ref} from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js'
+    import {createApp, computed, onMounted, ref} from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js'
 
     let app = createApp({
         setup() {
@@ -320,6 +608,49 @@
             const uiVariant = ref({{ui_variant | tojson}})
             const algoVariant = ref({{algo_variant | tojson}})
             const ratingThreshold = ref({{rating_threshold | tojson}})
+            const genreCatalog = ref({{genres | tojson}})
+
+            const defaultGenreMovies = ref({{default_genres_movies | tojson}})
+            const recommendationItems = ref({{recommendations | tojson}})
+            const recommendationMessage = ref({{recommendations_message | tojson}})
+            const similarItems = ref({{likes_similars | tojson}})
+            const similarMessage = ref({{likes_similar_message | tojson}})
+            const likedItems = ref({{likes | tojson}})
+            const explainCards = ref({{explain_cards | tojson}})
+
+            const recommendationSort = ref('score_desc')
+            const similarSort = ref('similarity_desc')
+            const likedSort = ref('liked_order')
+            const isRefreshing = ref(false)
+
+            const globalSearch = ref('')
+            const minYearFilter = ref(1900)
+            const minScoreFilter = ref(0)
+            const minSimilarityFilter = ref(0)
+            const activeTab = ref('recommendations')
+
+            const showGenres = ref(false)
+            const genres = ref({{user_genres | tojson}})
+
+            const showMovieRate = ref(false)
+            const userRates = ref({{user_rates | tojson}})
+
+            const userLikes = ref({{user_likes | tojson}})
+
+            const selectedGenreNames = computed(() => {
+                const selectedIds = new Set(genres.value.map(value => value.toString()))
+                return genreCatalog.value
+                    .filter(item => selectedIds.has(String(item.id)))
+                    .map(item => item.name)
+            })
+
+            const filteredRecommendationItems = computed(() => applyFilters(recommendationItems.value, 'recommendations'))
+            const filteredSimilarItems = computed(() => applyFilters(similarItems.value, 'similar'))
+            const filteredLikedItems = computed(() => applyFilters(likedItems.value, 'liked'))
+
+            const sortedRecommendationItems = computed(() => sortMovies(filteredRecommendationItems.value, recommendationSort.value))
+            const sortedSimilarItems = computed(() => sortMovies(filteredSimilarItems.value, similarSort.value))
+            const sortedLikedItems = computed(() => sortMovies(filteredLikedItems.value, likedSort.value))
 
             // ==== Vue default operations ====
             onMounted(() => {
@@ -335,6 +666,144 @@
                     rating_threshold: ratingThreshold.value,
                 })
             })
+
+            function sortMovies(items, sortKey) {
+                const sorted = [...(items || [])]
+
+                const parseNumber = (value, fallback = Number.NEGATIVE_INFINITY) => {
+                    const parsed = Number(value)
+                    return Number.isFinite(parsed) ? parsed : fallback
+                }
+
+                if (sortKey === 'liked_order') {
+                    return sorted
+                }
+
+                if (sortKey === 'title_asc') {
+                    return sorted.sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')))
+                }
+
+                if (sortKey === 'year_desc') {
+                    return sorted.sort((a, b) => parseNumber(b.year ?? b.release_date) - parseNumber(a.year ?? a.release_date))
+                }
+
+                if (sortKey === 'score_desc') {
+                    return sorted.sort((a, b) => parseNumber(b.score) - parseNumber(a.score))
+                }
+
+                if (sortKey === 'score_asc') {
+                    return sorted.sort((a, b) => parseNumber(a.score, Number.POSITIVE_INFINITY) - parseNumber(b.score, Number.POSITIVE_INFINITY))
+                }
+
+                if (sortKey === 'similarity_desc') {
+                    return sorted.sort((a, b) => parseNumber(b.similarity) - parseNumber(a.similarity))
+                }
+
+                if (sortKey === 'similarity_asc') {
+                    return sorted.sort((a, b) => parseNumber(a.similarity, Number.POSITIVE_INFINITY) - parseNumber(b.similarity, Number.POSITIVE_INFINITY))
+                }
+
+                return sorted
+            }
+
+            function numericValue(value, fallback = Number.NaN) {
+                const parsed = Number(value)
+                return Number.isFinite(parsed) ? parsed : fallback
+            }
+
+            function extractYear(movie) {
+                const yearCandidate = movie?.year ?? movie?.release_date
+                const parsed = parseInt(yearCandidate)
+                return Number.isFinite(parsed) ? parsed : null
+            }
+
+            function movieTitle(movie) {
+                return String(movie?.title || '').toLowerCase()
+            }
+
+            function applyFilters(items, section) {
+                const query = globalSearch.value.trim().toLowerCase()
+                const minYear = Number(minYearFilter.value || 0)
+                const minScore = Number(minScoreFilter.value || 0)
+                const minSimilarity = Number(minSimilarityFilter.value || 0)
+
+                return (items || []).filter(movie => {
+                    if (query && !movieTitle(movie).includes(query)) {
+                        return false
+                    }
+
+                    const movieYear = extractYear(movie)
+                    if (Number.isFinite(minYear) && minYear > 0 && movieYear !== null && movieYear < minYear) {
+                        return false
+                    }
+
+                    if (section === 'recommendations' && movie.score !== undefined && movie.score !== null) {
+                        if (numericValue(movie.score, Number.NEGATIVE_INFINITY) < minScore) {
+                            return false
+                        }
+                    }
+
+                    if (section === 'similar' && movie.similarity !== undefined && movie.similarity !== null) {
+                        if (numericValue(movie.similarity, Number.NEGATIVE_INFINITY) < minSimilarity) {
+                            return false
+                        }
+                    }
+
+                    return true
+                })
+            }
+
+            function previewGenres(movie) {
+                if (!movie || !Array.isArray(movie.genres)) {
+                    return []
+                }
+                return movie.genres.slice(0, 3)
+            }
+
+            function cardReason(movie, section) {
+                const matchedGenres = previewGenres(movie).filter(genre => selectedGenreNames.value.includes(genre))
+                if (section === 'recommendations' && movie.score !== undefined && movie.score !== null) {
+                    const score = Number(movie.score)
+                    if (Number.isFinite(score) && score >= 4.2) {
+                        return 'High predicted match score from your rating profile.'
+                    }
+                }
+
+                if (section === 'similar' && movie.similarity !== undefined && movie.similarity !== null) {
+                    const similarity = Number(movie.similarity)
+                    if (Number.isFinite(similarity) && similarity >= 0.4) {
+                        return 'Strong content similarity with your liked movies.'
+                    }
+                }
+
+                if (matchedGenres.length > 0) {
+                    return 'Matches your selected genres: ' + matchedGenres.join(', ')
+                }
+
+                return 'Diversity pick to broaden your watchlist.'
+            }
+
+            function resolveDisplayDate(movie) {
+                if (movie && movie.year !== undefined && movie.year !== null && movie.year !== '') {
+                    return movie.year
+                }
+                if (movie && movie.release_date !== undefined && movie.release_date !== null && movie.release_date !== '') {
+                    return movie.release_date
+                }
+                return 'N/A'
+            }
+
+            function onImageError(event) {
+                event.target.src = 'https://placehold.co/480x640?text=No+Cover'
+            }
+
+            function setListCookie(name, values) {
+                document.cookie = name + '=' + values.join(',') + '; path=/'
+            }
+
+            function clearCookie(name) {
+                document.cookie = name + '=; Max-Age=0; path=/'
+            }
 
             function trackEvent(eventName, payload = {}) {
                 const body = JSON.stringify({
@@ -356,6 +825,67 @@
                 })
             }
 
+            async function refreshRecommendations() {
+                if (uiVariant.value !== 'B') {
+                    return
+                }
+
+                isRefreshing.value = true
+                try {
+                    const response = await fetch('/api/recommendations', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            user_genres: genres.value,
+                            user_rates: userRates.value,
+                            user_likes: userLikes.value,
+                            ui_variant: uiVariant.value,
+                            algo_variant: algoVariant.value,
+                        }),
+                    })
+
+                    if (!response.ok) {
+                        throw new Error('Failed to refresh recommendations')
+                    }
+
+                    const payload = await response.json()
+                    defaultGenreMovies.value = payload.default_genres_movies || []
+                    recommendationItems.value = payload.recommendations || []
+                    recommendationMessage.value = payload.recommendations_message || 'No recommendations.'
+                    similarItems.value = payload.likes_similars || []
+                    similarMessage.value = payload.likes_similar_message || 'No similar movies found.'
+                    likedItems.value = payload.likes || []
+                    explainCards.value = payload.explain_cards || []
+                } catch (error) {
+                    console.error(error)
+                } finally {
+                    isRefreshing.value = false
+                }
+            }
+
+            function onSortChanged(section, sortKey) {
+                trackEvent('sort_changed', {
+                    section,
+                    sort_key: sortKey,
+                })
+            }
+
+            function onFilterChanged(filterKey, filterValue) {
+                trackEvent('filter_changed', {
+                    filter_key: filterKey,
+                    filter_value: String(filterValue),
+                })
+            }
+
+            function resetFilters() {
+                globalSearch.value = ''
+                minYearFilter.value = 1900
+                minScoreFilter.value = 0
+                minSimilarityFilter.value = 0
+
+                onFilterChanged('reset_all', 'true')
+            }
+
             function cleanAll() {
                 if (confirm("Are you sure to delete all records?")) {
                     trackEvent('clean_all', {
@@ -363,16 +893,31 @@
                         total_ratings: userRates.value.length,
                         likes_count: userLikes.value.length,
                     })
-                    document.cookie = "user_genres=; Max-Age=0";
-                    document.cookie = "user_rates=; Max-Age=0";
-                    document.cookie = "user_likes=; Max-Age=0";
-                    reloadPage()
+
+                    clearCookie('user_genres')
+                    clearCookie('user_rates')
+                    clearCookie('user_likes')
+
+                    genres.value = []
+                    userRates.value = []
+                    userLikes.value = []
+
+                    recommendationItems.value = []
+                    similarItems.value = []
+                    likedItems.value = []
+                    recommendationMessage.value = 'No recommendations.'
+                    similarMessage.value = 'No similar movies found.'
+                    explainCards.value = []
+                    defaultGenreMovies.value = []
+
+                    showGenres.value = true
+                    showMovieRate.value = false
+
+                    if (uiVariant.value !== 'B') {
+                        reloadPage()
+                    }
                 }
             }
-
-            // ==== Genre Operation ====
-            const showGenres = ref(false)
-            const genres = ref({{user_genres | tojson}}) // If this place shows error, please check the format: ref({{user_genres | tojson}})
 
             function updateGenre(_id) {
                 let id = _id.toString()
@@ -395,20 +940,32 @@
                 trackEvent('genres_saved', {
                     genres_count: genres.value.length,
                 })
-                document.cookie = "user_genres=" + genres.value;
-                document.cookie = "user_rates=; Max-Age=0";
-                reloadPage()
-            }
 
-            // ==== Movie Rate Operation ====
-            const showMovieRate = ref(false)
-            const userRates = ref({{user_rates | tojson}}) // If this place shows error, please check the format: ref({{user_rates | tojson}})
+                setListCookie('user_genres', genres.value)
+                clearCookie('user_rates')
+
+                userRates.value = []
+                recommendationItems.value = []
+                similarItems.value = []
+                likedItems.value = []
+                recommendationMessage.value = 'No recommendations.'
+                similarMessage.value = 'No similar movies found.'
+
+                showGenres.value = false
+                showMovieRate.value = genres.value.length > 0
+
+                if (uiVariant.value === 'B') {
+                    refreshRecommendations()
+                } else {
+                    reloadPage()
+                }
+            }
 
             function getRate(movieId) {
                 for (let index in userRates.value) {
                     let record = userRates.value[index].split('|')
                     if (parseInt(record[1]) === movieId) {
-                        return [index, record[2]]
+                        return [index, parseInt(record[2])]
                     }
                 }
 
@@ -440,10 +997,23 @@
                     })
                 }
 
-                document.cookie = "user_rates=" + userRates.value;
+                setListCookie('user_rates', userRates.value)
             }
-            // ==== Movie Like Operation ====
-            const userLikes = ref({{user_likes | tojson}}) // If this place shows error, please check the format: ref({{user_likes | tojson}})
+
+            function handleRatingSave() {
+                showMovieRate.value = false
+
+                trackEvent('rating_modal_saved', {
+                    total_ratings: userRates.value.length,
+                    rating_threshold: ratingThreshold.value,
+                })
+
+                if (uiVariant.value === 'B') {
+                    refreshRecommendations()
+                } else {
+                    reloadPage()
+                }
+            }
 
             function updateLike(_movieId) {
                 let movieId = _movieId.toString()
@@ -463,10 +1033,15 @@
                     likes_count: userLikes.value.length,
                 })
 
-                document.cookie = "user_likes=" + userLikes.value;
+                setListCookie('user_likes', userLikes.value)
 
-                reloadPage();
+                if (uiVariant.value === 'B') {
+                    refreshRecommendations()
+                } else {
+                    reloadPage()
+                }
             }
+
             function inLikes(movieId) {
                 return userLikes.value.includes(movieId.toString())
             }
@@ -482,6 +1057,7 @@
                 uiVariant,
                 algoVariant,
                 ratingThreshold,
+                isRefreshing,
                 cleanAll,
 
                 showGenres,
@@ -492,12 +1068,40 @@
 
                 showMovieRate,
                 userRates,
+                defaultGenreMovies,
                 getRate,
                 updateRate,
+                handleRatingSave,
 
                 userLikes,
                 updateLike,
                 inLikes,
+
+                recommendationItems,
+                recommendationMessage,
+                similarItems,
+                similarMessage,
+                likedItems,
+                explainCards,
+                recommendationSort,
+                similarSort,
+                likedSort,
+                activeTab,
+                globalSearch,
+                minYearFilter,
+                minScoreFilter,
+                minSimilarityFilter,
+                sortedRecommendationItems,
+                sortedSimilarItems,
+                sortedLikedItems,
+                onSortChanged,
+                onFilterChanged,
+                resetFilters,
+                previewGenres,
+                cardReason,
+                refreshRecommendations,
+                resolveDisplayDate,
+                onImageError,
 
                 reloadPage,
             }
@@ -538,6 +1142,348 @@
 
     .star {
         cursor: pointer;
+    }
+
+    /* UI-B Premium Minimalist Theme */
+    .ui-b-shell {
+        --ui-b-bg: #f3f6f2;
+        --ui-b-surface: #ffffff;
+        --ui-b-surface-soft: #f8faf8;
+        --ui-b-text: #1f2b27;
+        --ui-b-muted: #65716a;
+        --ui-b-border: #d6ddd5;
+        --ui-b-accent: #4f5e57;
+        --ui-b-shadow: 0 12px 32px rgba(31, 43, 39, 0.07);
+        font-family: 'Manrope', 'Helvetica Neue', sans-serif;
+        color: var(--ui-b-text);
+        background: linear-gradient(180deg, #f7f9f6 0%, var(--ui-b-bg) 100%);
+        border-radius: 20px;
+        padding: 0.7rem 0.4rem 1.2rem;
+    }
+
+    .ui-b-shell .icon {
+        color: var(--ui-b-accent);
+    }
+
+    .ui-b-section {
+        padding: 0.95rem 0 0.35rem;
+    }
+
+    .ui-b-section-intro {
+        padding-top: 0.5rem;
+    }
+
+    .ui-b-section-toolbar {
+        padding-top: 0.75rem;
+    }
+
+    .ui-b-section-tabs {
+        padding-top: 0.55rem;
+        padding-bottom: 0.15rem;
+    }
+
+    .ui-b-section-panel {
+        padding-top: 1rem;
+        padding-bottom: 0.45rem;
+    }
+
+    .ui-b-section-last {
+        padding-bottom: 1.2rem;
+    }
+
+    .ui-b-explanation {
+        background: var(--ui-b-surface);
+        border: 1px solid var(--ui-b-border);
+        border-radius: 16px;
+        box-shadow: 0 6px 20px rgba(31, 43, 39, 0.05);
+        padding: 0.95rem 1rem;
+        height: 100%;
+    }
+
+    .ui-b-explanation-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 0.4rem;
+        font-family: 'Cormorant Garamond', serif;
+        font-size: 1.2rem;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        color: var(--ui-b-text);
+    }
+
+    .ui-b-explanation-body {
+        font-size: 0.82rem;
+        color: var(--ui-b-muted);
+        line-height: 1.5;
+    }
+
+    .ui-b-toolbar {
+        background: var(--ui-b-surface);
+        border: 1px solid var(--ui-b-border);
+        border-radius: 18px;
+        box-shadow: var(--ui-b-shadow);
+        padding: 1rem 1rem 0.85rem;
+    }
+
+    .ui-b-label {
+        margin-bottom: 0.45rem;
+        font-size: 0.66rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        color: var(--ui-b-muted);
+    }
+
+    .ui-b-input {
+        height: 2.3rem;
+        border: 1px solid var(--ui-b-border);
+        border-radius: 12px;
+        box-shadow: none;
+        background: var(--ui-b-surface-soft);
+        color: var(--ui-b-text);
+        padding-left: 2rem;
+    }
+
+    .ui-b-input:focus {
+        border-color: var(--ui-b-accent);
+        box-shadow: 0 0 0 0.05rem rgba(79, 94, 87, 0.18);
+    }
+
+    .ui-b-shell .slider-control {
+        width: 100%;
+        accent-color: var(--ui-b-accent);
+        margin-top: 0.25rem;
+    }
+
+    .ui-b-range-val {
+        margin-top: 0.25rem;
+        margin-bottom: 0;
+        font-size: 0.72rem;
+        color: var(--ui-b-muted);
+    }
+
+    .ui-b-toolbar-footer {
+        display: flex;
+        justify-content: flex-end;
+        border-top: 1px solid #e3e9e3;
+        margin-top: 0.9rem;
+        padding-top: 0.75rem;
+    }
+
+    .ui-b-toolbar-footer .tags {
+        gap: 0.4rem;
+    }
+
+    .ui-b-tabs ul {
+        border-bottom: 1px solid var(--ui-b-border);
+    }
+
+    .ui-b-tabs li a {
+        color: var(--ui-b-muted);
+        border: 1px solid transparent;
+        border-radius: 999px;
+        margin: 0 0.15rem;
+        padding: 0.48rem 0.92rem;
+        transition: all 0.2s ease;
+    }
+
+    .ui-b-tabs li.is-active a {
+        color: var(--ui-b-text);
+        border-color: var(--ui-b-border);
+        background: var(--ui-b-surface);
+        box-shadow: 0 5px 14px rgba(31, 43, 39, 0.08);
+    }
+
+    .ui-b-tabs li a:hover {
+        color: var(--ui-b-text);
+        border-color: #c6cec6;
+    }
+
+    .ui-b-panel-head {
+        border-bottom: 1px solid var(--ui-b-border);
+        padding-bottom: 0.65rem;
+        margin-bottom: 0.9rem;
+    }
+
+    .ui-b-section-title {
+        display: flex;
+        align-items: center;
+        gap: 0.42rem;
+        margin: 0;
+        font-family: 'Cormorant Garamond', serif;
+        font-size: 1.65rem;
+        font-weight: 600;
+        color: var(--ui-b-text);
+    }
+
+    .ui-b-panel-note {
+        margin-bottom: 0.32rem;
+        font-size: 0.86rem;
+        color: var(--ui-b-muted);
+        line-height: 1.45;
+    }
+
+    .ui-b-panel-meta {
+        margin-bottom: 0.82rem;
+        font-size: 0.69rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--ui-b-muted);
+    }
+
+    .ui-b-card {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        border-radius: 16px;
+        border: 1px solid var(--ui-b-border);
+        background: var(--ui-b-surface);
+        box-shadow: 0 8px 24px rgba(31, 43, 39, 0.06);
+        overflow: hidden;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .ui-b-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 14px 30px rgba(31, 43, 39, 0.1);
+    }
+
+    .ui-b-card .card-content {
+        padding: 0.95rem 0.95rem 0.85rem;
+    }
+
+    .ui-b-card-image img {
+        border-top-left-radius: 16px;
+        border-top-right-radius: 16px;
+    }
+
+    .ui-b-tag {
+        background: var(--ui-b-surface-soft) !important;
+        border: 1px solid var(--ui-b-border);
+        color: var(--ui-b-muted) !important;
+        border-radius: 999px;
+        font-size: 0.66rem !important;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+    }
+
+    .ui-b-card-reason {
+        margin-top: 0.75rem;
+        padding-top: 0.65rem;
+        border-top: 1px solid #e5ebe5;
+        font-size: 0.73rem;
+        color: var(--ui-b-muted);
+        line-height: 1.45;
+        min-height: 3.1rem;
+    }
+
+    .ui-b-card-footer {
+        margin-top: auto;
+        padding: 0.65rem 0.95rem 0.95rem;
+        background: transparent;
+    }
+
+    .ui-b-btn {
+        min-height: 2.15rem;
+        border: 1px solid var(--ui-b-border);
+        border-radius: 12px;
+        background: var(--ui-b-surface);
+        color: var(--ui-b-text);
+        transition: all 0.2s ease;
+    }
+
+    .ui-b-btn:hover {
+        border-color: var(--ui-b-accent);
+        color: var(--ui-b-text);
+    }
+
+    .ui-b-btn.is-active-like {
+        border-color: var(--ui-b-accent);
+        background: var(--ui-b-accent);
+        color: #ffffff;
+    }
+
+    .ui-b-refresh-btn {
+        margin-left: 0.5rem;
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .ui-b-select select {
+        height: 2.15rem;
+        border: 1px solid var(--ui-b-border);
+        border-radius: 12px;
+        box-shadow: none;
+        background: var(--ui-b-surface-soft);
+        color: var(--ui-b-text);
+        padding-right: 2rem;
+    }
+
+    .ui-b-select select:focus {
+        border-color: var(--ui-b-accent);
+    }
+
+    .ui-b-notification {
+        border: 1px dashed var(--ui-b-border);
+        border-radius: 14px;
+        background: var(--ui-b-surface);
+        color: var(--ui-b-muted);
+        padding: 0.9rem 1rem;
+        font-size: 0.82rem;
+    }
+
+    .ui-b-shell .card .tags {
+        margin-bottom: 0.25rem;
+    }
+
+    @media screen and (max-width: 1024px) {
+        .ui-b-shell {
+            padding: 0.6rem 0.25rem 1rem;
+        }
+
+        .ui-b-section-title {
+            font-size: 1.45rem;
+        }
+    }
+
+    @media screen and (max-width: 768px) {
+        .ui-b-shell .level {
+            display: block;
+        }
+
+        .ui-b-shell .level-right {
+            margin-top: 0.5rem;
+        }
+
+        .ui-b-section {
+            padding-top: 0.75rem;
+            padding-bottom: 0.2rem;
+        }
+
+        .ui-b-toolbar {
+            padding: 0.9rem 0.8rem 0.75rem;
+        }
+
+        .ui-b-toolbar-footer {
+            justify-content: flex-start;
+        }
+
+        .ui-b-tabs li a {
+            padding: 0.42rem 0.68rem;
+            margin: 0 0.08rem;
+        }
+
+        .ui-b-tabs li a span:last-child {
+            font-size: 0.76rem;
+        }
+
+        .ui-b-card .card-content {
+            padding: 0.8rem 0.8rem 0.7rem;
+        }
+
+        .ui-b-card-footer {
+            padding: 0.6rem 0.8rem 0.8rem;
+        }
     }
 </style>
 </body>
