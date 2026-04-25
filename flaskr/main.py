@@ -27,6 +27,13 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 bp = Blueprint('main', __name__, url_prefix='/')
 
+
+@bp.route('/healthz')
+def healthz():
+    """Lightweight health check used by UptimeRobot to keep the dyno warm."""
+    return 'ok', 200
+
+
 movies, genres, rates = loadData()
 
 # Load full ratings (with timestamp) for sequence construction.
