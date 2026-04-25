@@ -3,21 +3,38 @@ from flask import (
 )
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
 
 import pandas as pd
 
 from .tools.data_tool import *
+from .tools import sasrec_tool
 
-from surprise import Reader
-from surprise import KNNWithMeans, SVD
-from surprise import Dataset
+# Lazy / optional import of scikit-surprise so the SASRec-only env can boot even if
+# `surprise` cannot load (e.g. a Windows app-control policy blocking its compiled
+# .pyd files). We expose `Reader`, `KNNWithMeans`, `SVD`, `Dataset` if available.
+try:
+    from surprise import Reader, KNNWithMeans, SVD, Dataset
+    _SURPRISE_AVAILABLE = True
+    _SURPRISE_ERROR = None
+except Exception as _exc:  # pragma: no cover - depends on environment
+    _SURPRISE_AVAILABLE = False
+    _SURPRISE_ERROR = str(_exc)
+    Reader = KNNWithMeans = SVD = Dataset = None  # type: ignore
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 bp = Blueprint('main', __name__, url_prefix='/')
 
 movies, genres, rates = loadData()
+
+# Load full ratings (with timestamp) for sequence construction.
+_RATINGS_WITH_TIME_PATH = os.path.join(os.path.dirname(__file__), 'static', 'ml_data', 'ratings.csv')
+try:
+    rates_with_time = pd.read_csv(_RATINGS_WITH_TIME_PATH)
+except Exception:
+    rates_with_time = pd.DataFrame(columns=['userId', 'movieId', 'rating', 'timestamp'])
 
 EXPERIMENT_COOKIE_MAX_AGE = 60 * 60 * 24 * 90
 DEFAULT_USER_ID = 611
@@ -38,7 +55,7 @@ UI_VARIANT_LABELS = {
 
 ALGO_VARIANT_LABELS = {
     'A': 'User-based k-NN + Multi-hot',
-    'B': 'MF (SVD) + TF-IDF',
+    'B': 'SASRec (Sequential Transformer) + TF-IDF',
 }
 
 VALID_EVENT_NAMES = {
@@ -53,6 +70,10 @@ VALID_EVENT_NAMES = {
     'sort_changed',
     'rating_modal_saved',
     'filter_changed',
+    'slider_changed',
+    'cold_start_seed_selected',
+    'attention_explanation_viewed',
+    'onboarding_variant_picked',
 }
 
 
@@ -142,7 +163,17 @@ def build_explain_cards(user_genres, user_rates, user_likes, ui_variant, algo_va
         selected_genre_names = genres[genres['id'].isin(selected_ids)]['name'].tolist()
 
     if algo_variant == 'B':
-        recommendation_logic = 'Primary ranking uses MF (SVD), and similar-items use TF-IDF text vectors.'
+        if sasrec_tool.is_available():
+            recommendation_logic = (
+                'Primary ranking uses a SASRec sequential Transformer that conditions on the time-ordered '
+                'sequence of your ratings; similar-item lists use TF-IDF text vectors.'
+            )
+        else:
+            recommendation_logic = (
+                'SASRec checkpoint not loaded yet, falling back to MF (SVD). '
+                'Run `python -m flaskr.tools.train_sasrec` to enable the sequential model. '
+                f'({sasrec_tool.status_message()})'
+            )
     else:
         recommendation_logic = 'Primary ranking uses user-based k-NN, and similar-items use genre multi-hot vectors.'
 
@@ -168,13 +199,20 @@ def build_explain_cards(user_genres, user_rates, user_likes, ui_variant, algo_va
     ]
 
 
-def compute_recommendation_payload(user_genres, user_rates, user_likes, ui_variant, algo_variant):
+def compute_recommendation_payload(user_genres, user_rates, user_likes, ui_variant, algo_variant,
+                                   diversity=0.0, recency=0.0):
     default_genres_movies = getMoviesByGenres(user_genres)[:10]
     recommendations_movies, recommendations_message = getRecommendationBy(user_rates, algo_variant=algo_variant)
+
+    if algo_variant == 'B' and (diversity > 0.0 or recency > 0.0) and recommendations_movies:
+        recommendations_movies = sasrec_tool.diversity_rerank(
+            recommendations_movies, diversity=diversity, recency=recency
+        )
 
     liked_movie_ids = [int(raw_id) for raw_id in user_likes if str(raw_id).isdigit()]
     likes_similar_movies, likes_similar_message = getLikedSimilarBy(liked_movie_ids, algo_variant=algo_variant)
     likes_movies = getUserLikesBy(user_likes)
+    timeline = build_rating_timeline(user_rates)
 
     return {
         'default_genres_movies': default_genres_movies,
@@ -184,7 +222,41 @@ def compute_recommendation_payload(user_genres, user_rates, user_likes, ui_varia
         'likes_similar_message': likes_similar_message,
         'likes': likes_movies,
         'explain_cards': build_explain_cards(user_genres, user_rates, user_likes, ui_variant, algo_variant),
+        'rating_timeline': timeline,
+        'sasrec_available': bool(sasrec_tool.is_available() and algo_variant == 'B'),
     }
+
+
+def build_rating_timeline(user_rates):
+    """Return a chronological list of {movieId, title, year, cover_url, rating, position}
+    for the current session, used by UI-B's timeline visualization.
+    """
+    if not user_rates:
+        return []
+    try:
+        rates_df = ratesFromUser(user_rates)
+    except (IndexError, ValueError):
+        return []
+    rates_df = rates_df.copy()
+    # Append a tiebreaker so the order matches insertion order from the cookie
+    rates_df['order'] = range(len(rates_df))
+    rates_df = rates_df.sort_values('order')
+    timeline = []
+    for pos, row in enumerate(rates_df.itertuples(index=False), start=1):
+        movie_id = int(row.movieId)
+        meta = movies[movies['movieId'] == movie_id]
+        if len(meta) == 0:
+            continue
+        meta = meta.iloc[0]
+        timeline.append({
+            'position': pos,
+            'movieId': movie_id,
+            'title': str(meta.get('title', '')),
+            'year': None if pd.isna(meta.get('year')) else int(meta.get('year')),
+            'cover_url': str(meta.get('cover_url', '')),
+            'rating': float(row.rating),
+        })
+    return timeline
 
 
 @bp.route('/event', methods=('POST',))
@@ -240,7 +312,13 @@ def recommendations_api():
     if algo_variant is None:
         algo_variant = get_active_algo_variant()
 
-    result_payload = compute_recommendation_payload(user_genres, user_rates, user_likes, ui_variant, algo_variant)
+    diversity = max(0.0, min(1.0, coerce_float(payload.get('diversity'), 0.0) or 0.0))
+    recency = max(0.0, min(1.0, coerce_float(payload.get('recency'), 0.0) or 0.0))
+
+    result_payload = compute_recommendation_payload(
+        user_genres, user_rates, user_likes, ui_variant, algo_variant,
+        diversity=diversity, recency=recency,
+    )
     result_payload['rating_threshold'] = RATING_THRESHOLD_BY_UI.get(ui_variant, 10)
 
     log_experiment_event('async_refresh', {
@@ -250,9 +328,49 @@ def recommendations_api():
         'ratings_count': len(user_rates),
         'likes_count': len(user_likes),
         'rating_threshold': result_payload['rating_threshold'],
+        'diversity': diversity,
+        'recency': recency,
     })
 
     return result_payload, 200
+
+
+@bp.route('/api/sasrec_explain', methods=('POST',))
+def sasrec_explain_api():
+    payload = request.get_json(silent=True) or {}
+    raw_rates = payload.get('user_rates', split_cookie_values(request.cookies.get('user_rates')))
+    user_rates = [str(value) for value in raw_rates if str(value) != '']
+    if not user_rates:
+        return {'history': [], 'available': sasrec_tool.is_available()}, 200
+
+    try:
+        rates_df = ratesFromUser(user_rates)
+    except (IndexError, ValueError):
+        return {'history': [], 'available': sasrec_tool.is_available()}, 200
+
+    sequence = [int(mid) for mid in rates_df['movieId'].tolist()]
+    top_n = max(1, min(5, coerce_int(payload.get('top_n'), 3) or 3))
+
+    evidence_ids = sasrec_tool.get_attention_evidence(sequence, top_n=top_n)
+    history = []
+    for movie_id in evidence_ids:
+        meta = movies[movies['movieId'] == int(movie_id)]
+        if len(meta) == 0:
+            continue
+        meta = meta.iloc[0]
+        history.append({
+            'movieId': int(movie_id),
+            'title': str(meta.get('title', '')),
+            'year': None if pd.isna(meta.get('year')) else int(meta.get('year')),
+            'cover_url': str(meta.get('cover_url', '')),
+        })
+
+    log_experiment_event('attention_explanation_viewed', {
+        'history_size': len(sequence),
+        'evidence_size': len(history),
+    })
+
+    return {'history': history, 'available': sasrec_tool.is_available()}, 200
 
 
 @bp.route('/', methods=('GET', 'POST'))
@@ -294,6 +412,8 @@ def index():
                                              likes_similar_message=page_payload['likes_similar_message'],
                                              likes=page_payload['likes'],
                                              explain_cards=page_payload['explain_cards'],
+                                             rating_timeline=page_payload['rating_timeline'],
+                                             sasrec_available=page_payload['sasrec_available'],
                                              ui_variant=ui_variant,
                                              ui_variant_label=UI_VARIANT_LABELS[ui_variant],
                                              algo_variant=algo_variant,
@@ -359,45 +479,152 @@ def infer_user_id(user_rates_df):
     return int(user_rates_df.iloc[0]['userId'])
 
 
+def _recommend_without_surprise(user_rates_df, top_k):
+    """Genre-affinity + popularity fallback when scikit-surprise is unavailable."""
+    user_id = infer_user_id(user_rates_df)
+    rated_ids = set(user_rates_df[user_rates_df['userId'] == user_id]['movieId'].tolist())
+
+    # User's positive history (rating >= 4) drives genre affinity, all rated rows fall back.
+    pos_df = user_rates_df[(user_rates_df['userId'] == user_id) & (user_rates_df['rating'] >= 4)]
+    if len(pos_df) == 0:
+        pos_df = user_rates_df[user_rates_df['userId'] == user_id]
+    liked_ids = set(pos_df['movieId'].tolist())
+
+    genre_weights = {}
+    if liked_ids:
+        liked_movies = movies[movies['movieId'].isin(liked_ids)]
+        for genre_list in liked_movies['genres'].dropna():
+            for g in genre_list:
+                genre_weights[g] = genre_weights.get(g, 0) + 1
+        # Normalize.
+        total = sum(genre_weights.values()) or 1
+        genre_weights = {g: w / total for g, w in genre_weights.items()}
+
+    # Global popularity stats from the loaded `rates` table.
+    pop_stats = rates.groupby('movieId')['rating'].agg(['mean', 'count']).reset_index()
+    pop_stats.columns = ['movieId', 'avg_rating', 'rating_count']
+    global_avg = float(rates['rating'].mean()) if len(rates) > 0 else 3.5
+    # Bayesian-shrunk rating to dampen low-count noise.
+    m = 20.0
+    pop_stats['shrunk'] = (
+        (pop_stats['rating_count'] * pop_stats['avg_rating'] + m * global_avg)
+        / (pop_stats['rating_count'] + m)
+    )
+
+    candidates = movies[~movies['movieId'].isin(rated_ids)].copy()
+    candidates = candidates.merge(pop_stats[['movieId', 'shrunk']], on='movieId', how='left')
+    candidates['shrunk'] = candidates['shrunk'].fillna(global_avg)
+
+    def _genre_score(genre_list):
+        if not isinstance(genre_list, list) or not genre_weights:
+            return 0.0
+        return float(sum(genre_weights.get(g, 0.0) for g in genre_list))
+
+    candidates['genre_aff'] = candidates['genres'].apply(_genre_score)
+    # Final score: genre affinity dominates, popularity breaks ties.
+    candidates['score'] = candidates['genre_aff'] * 4.0 + (candidates['shrunk'] - global_avg)
+
+    top = candidates.sort_values(by=['score', 'shrunk'], ascending=False).head(top_k).copy()
+    if len(top) == 0:
+        return [], 'No recommendations.'
+    top['score'] = top['score'].round(3)
+    top = top.drop(columns=['genre_aff', 'shrunk'])
+    return top.to_dict('records'), 'These movies are recommended by genre-affinity scoring with Bayesian-smoothed popularity.'
+
+
 def getRecommendationBy(user_rates, algo_variant='A', top_k=TOP_K):
-    results = pd.DataFrame()
-    if len(user_rates) > 0:
-        reader = Reader(rating_scale=(1, 5))
-        try:
-            user_rates_df = ratesFromUser(user_rates)
-        except (IndexError, ValueError):
-            return [], 'No recommendations.'
-        training_rates = pd.concat([rates, user_rates_df], ignore_index=True)
-        training_data = Dataset.load_from_df(training_rates[['userId', 'movieId', 'rating']], reader=reader)
-        trainset = training_data.build_full_trainset()
+    if len(user_rates) == 0:
+        return [], "No recommendations."
 
-        if algo_variant == 'B':
-            algo = SVD(n_factors=50, n_epochs=20, random_state=42)
-            algorithm_name = 'Matrix Factorization (SVD)'
-        else:
-            algo = KNNWithMeans(sim_options={'name': 'pearson', 'user_based': True})
-            algorithm_name = 'User-based k-NN with means'
+    try:
+        user_rates_df = ratesFromUser(user_rates)
+    except (IndexError, ValueError):
+        return [], 'No recommendations.'
 
-        algo.fit(trainset)
+    if algo_variant == 'B' and sasrec_tool.is_available():
+        return _recommend_with_sasrec(user_rates_df, top_k)
 
-        user_id = infer_user_id(user_rates_df)
-        rated_movie_ids = set(user_rates_df[user_rates_df['userId'] == user_id]['movieId'].tolist())
-        predictions = [algo.predict(user_id, movie_id) for movie_id in movies['movieId'].unique() if
-                       movie_id not in rated_movie_ids]
-        top_predictions = sorted(predictions, key=lambda x: x.est, reverse=True)[:top_k]
+    if not _SURPRISE_AVAILABLE:
+        # Fallback recommender that does not require scikit-surprise.
+        results, fb_msg = _recommend_without_surprise(user_rates_df, top_k)
+        return results, fb_msg
 
-        top_movie_ids = [int(pred.iid) for pred in top_predictions]
-        score_map = {int(pred.iid): round(float(pred.est), 3) for pred in top_predictions}
-        order_map = {movie_id: index for index, movie_id in enumerate(top_movie_ids)}
+    # Algo-A path (or fallback if SASRec unavailable): collaborative filtering with Surprise.
+    reader = Reader(rating_scale=(1, 5))
+    training_rates = pd.concat([rates, user_rates_df], ignore_index=True)
+    training_data = Dataset.load_from_df(training_rates[['userId', 'movieId', 'rating']], reader=reader)
+    trainset = training_data.build_full_trainset()
 
-        results = movies[movies['movieId'].isin(top_movie_ids)].copy(deep=True)
-        results['score'] = results['movieId'].map(score_map)
-        results['rank'] = results['movieId'].map(order_map)
-        results = results.sort_values(by=['rank']).drop(columns=['rank'])
+    if algo_variant == 'B':
+        algo = SVD(n_factors=50, n_epochs=20, random_state=42)
+        algorithm_name = f"Matrix Factorization (SVD) — fallback. {sasrec_tool.status_message()}"
+    else:
+        algo = KNNWithMeans(sim_options={'name': 'pearson', 'user_based': True})
+        algorithm_name = 'User-based k-NN with means'
+
+    algo.fit(trainset)
+
+    user_id = infer_user_id(user_rates_df)
+    rated_movie_ids = set(user_rates_df[user_rates_df['userId'] == user_id]['movieId'].tolist())
+    predictions = [algo.predict(user_id, movie_id) for movie_id in movies['movieId'].unique() if
+                   movie_id not in rated_movie_ids]
+    top_predictions = sorted(predictions, key=lambda x: x.est, reverse=True)[:top_k]
+
+    top_movie_ids = [int(pred.iid) for pred in top_predictions]
+    score_map = {int(pred.iid): round(float(pred.est), 3) for pred in top_predictions}
+    order_map = {movie_id: index for index, movie_id in enumerate(top_movie_ids)}
+
+    results = movies[movies['movieId'].isin(top_movie_ids)].copy(deep=True)
+    results['score'] = results['movieId'].map(score_map)
+    results['rank'] = results['movieId'].map(order_map)
+    results = results.sort_values(by=['rank']).drop(columns=['rank'])
 
     if len(results) > 0:
         return results.to_dict('records'), f"These movies are recommended by {algorithm_name}."
     return [], "No recommendations."
+
+
+def _recommend_with_sasrec(user_rates_df, top_k):
+    """Build a chronological item sequence for the active session and rank with SASRec."""
+    user_id = infer_user_id(user_rates_df)
+    history_movie_ids = [int(mid) for mid in user_rates_df['movieId'].tolist()]
+
+    # Augment with the user's historical ratings from ratings.csv (if any) sorted by timestamp,
+    # so cold-start sessions still benefit from the larger context. Session ratings always go last.
+    if len(rates_with_time) and user_id in rates_with_time['userId'].values:
+        existing = (
+            rates_with_time[rates_with_time['userId'] == user_id]
+            .sort_values('timestamp')['movieId']
+            .astype(int)
+            .tolist()
+        )
+        # Avoid duplicate items between historical and session inputs
+        seen = set(history_movie_ids)
+        sequence = [m for m in existing if m not in seen] + history_movie_ids\
+            if existing else history_movie_ids
+    else:
+        sequence = history_movie_ids
+
+    ranked = sasrec_tool.recommend_for_sequence(
+        sequence,
+        top_k=top_k,
+        exclude_movie_ids=history_movie_ids,
+    )
+    if not ranked:
+        return [], "SASRec returned no candidates (sequence may be empty in the trained vocabulary)."
+
+    score_map = {mid: round(score, 4) for mid, score in ranked}
+    top_movie_ids = [mid for mid, _ in ranked]
+    order_map = {mid: idx for idx, mid in enumerate(top_movie_ids)}
+
+    results = movies[movies['movieId'].isin(top_movie_ids)].copy(deep=True)
+    results['score'] = results['movieId'].map(score_map)
+    results['rank'] = results['movieId'].map(order_map)
+    results = results.sort_values(by=['rank']).drop(columns=['rank'])
+
+    if len(results) == 0:
+        return [], "SASRec ranked items not found in movie metadata."
+    return results.to_dict('records'), 'These movies are recommended by SASRec, conditioned on your time-ordered ratings.'
 
 
 def getLikedSimilarBy(user_likes, algo_variant='A'):

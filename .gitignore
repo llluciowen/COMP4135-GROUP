@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.Python
+build/
+dist/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Flask instance (per-deploy secret; never commit)
+instance/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs (we keep ab_events.jsonl since it's the experiment data)
+*.log
+
+# Local-only Lab3 training artifacts (not used at runtime by Flask app)
+log/
+log_tensorboard/
+
+# Cache
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/

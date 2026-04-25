@@ -1,0 +1,36 @@
+# Conda env for the SASRec-enhanced Algo-B branch.
+# Create with:
+#   conda env create -f environment_sas.yml
+#   conda activate rs_group_v4_sas
+# Then run:
+#   flask --app flaskr run --debug
+name: rs_group_v4_sas
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - numpy=1.26.4
+  - pandas=2.1.3
+  - scipy=1.11.4
+  - scikit-learn=1.4.0
+  - scikit-surprise=1.1.3
+  - pytorch=2.4.1
+  - cpuonly
+  - pip:
+      - flask==3.0.0
+      - pyquery==2.0.0
+      - joblib==1.3.2
+      - nltk==3.8.1
+      - lxml==4.9.3
+      - watchdog==3.0.0
+      - recbole==1.2.1
+      - tensorboard==2.20.0
+      - pyyaml==6.0.3
+      - colorlog
+      - colorama
+      - thop
+      - texttable
+      - kmeans-pytorch

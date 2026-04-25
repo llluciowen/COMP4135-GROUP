@@ -64,7 +64,7 @@
             </nav>
         </div>
 
-        <section class="section pt-2 pb-0">
+        <section class="section pt-2 pb-0" v-if="onboardingStage !== 'variant'">
             <div class="container">
                 <div :class="['notification', uiVariant === 'B' ? 'is-info is-light' : 'is-light']">
                     <p class="mb-2"><strong>Experiment Assignment</strong>: {{ ui_variant_label }} x {{ algo_variant_label }}</p>
@@ -79,7 +79,44 @@
             </div>
         </section>
 
-        <template v-if="uiVariant === 'B' && genres.length > 0">
+        <template v-if="onboardingStage === 'variant'">
+            <section class="section pt-2 pb-0">
+                <div class="container">
+                    <div class="box ui-b-variant-picker">
+                        <p class="mb-3"><strong>Pick an experiment variant</strong></p>
+                        <p class="is-size-7 has-text-grey mb-4">Choose which UI x Algorithm pair you want to try. After this you'll pick genres and rate a few movies, then your personalised recommendations will appear.</p>
+                        <div class="columns is-multiline is-mobile">
+                            <div class="column is-6-desktop is-12-mobile">
+                                <a class="box ui-b-variant-card" @click="pickVariant('A', 'A')">
+                                    <p class="has-text-weight-bold"><span class="tag is-info is-light mr-2">A</span><span class="tag is-success is-light mr-2">A</span> Original UI + User-based k-NN</p>
+                                    <p class="is-size-7 has-text-grey mt-1">Classic baseline. Rate at least 10 movies; recommendations come from a Pearson-correlation k-NN over all users.</p>
+                                </a>
+                            </div>
+                            <div class="column is-6-desktop is-12-mobile">
+                                <a class="box ui-b-variant-card" @click="pickVariant('A', 'B')">
+                                    <p class="has-text-weight-bold"><span class="tag is-info is-light mr-2">A</span><span class="tag is-success is-light mr-2">B</span> Original UI + SASRec</p>
+                                    <p class="is-size-7 has-text-grey mt-1">Same UI as variant A/A, but recommendations come from a sequential transformer (SASRec) trained on time-ordered ratings.</p>
+                                </a>
+                            </div>
+                            <div class="column is-6-desktop is-12-mobile">
+                                <a class="box ui-b-variant-card" @click="pickVariant('B', 'A')">
+                                    <p class="has-text-weight-bold"><span class="tag is-info is-light mr-2">B</span><span class="tag is-success is-light mr-2">A</span> Improved UI + User-based k-NN</p>
+                                    <p class="is-size-7 has-text-grey mt-1">New UX (5-rating onboarding, sortable cards, rating timeline) on top of the classical k-NN backbone.</p>
+                                </a>
+                            </div>
+                            <div class="column is-6-desktop is-12-mobile">
+                                <a class="box ui-b-variant-card ui-b-variant-card-recommended" @click="pickVariant('B', 'B')">
+                                    <p class="has-text-weight-bold"><span class="tag is-info mr-2">B</span><span class="tag is-success mr-2">B</span> Improved UI + SASRec <span class="tag is-warning is-light ml-2">recommended</span></p>
+                                    <p class="is-size-7 has-text-grey mt-1">The full innovation: SASRec recommendations plus the diversity/recency rerank, the "Why these picks?" attention card, and the cold-start poster picker.</p>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </template>
+
+        <template v-if="uiVariant === 'B' && onboardingStage !== 'variant' && genres.length > 0">
             <section class="section pt-2 pb-0">
                 <div class="container">
                     <div class="box">
@@ -247,6 +284,32 @@
                     </div>
                 </section>
 
+                <section class="section ui-b-section ui-b-section-timeline" v-if="ratingTimeline.length > 0">
+                    <div class="container">
+                        <div class="ui-b-timeline-card">
+                            <div class="ui-b-timeline-head">
+                                <p class="ui-b-section-title"><i class="fa fa-clock-o"></i><span>Your Rating Timeline</span></p>
+                                <p class="ui-b-timeline-sub" v-if="sasrecAvailable">
+                                    The SASRec model reads this sequence (left to right) to predict what you'll watch next.
+                                </p>
+                                <p class="ui-b-timeline-sub" v-else>
+                                    Time-ordered view of every movie you've rated this session.
+                                </p>
+                            </div>
+                            <div class="ui-b-timeline-track">
+                                <div class="ui-b-timeline-item" v-for="entry in ratingTimeline" :key="'tl-' + entry.movieId">
+                                    <div class="ui-b-timeline-poster">
+                                        <img :src="entry.cover_url" @error="onImageError" alt="">
+                                        <span class="ui-b-timeline-rating"><i class="fa fa-star"></i> [[ entry.rating ]]</span>
+                                    </div>
+                                    <p class="ui-b-timeline-title">[[ entry.title ]]</p>
+                                    <p class="ui-b-timeline-meta">#[[ entry.position ]] &middot; [[ entry.year || '—' ]]</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
                 <section class="section ui-b-section ui-b-section-toolbar">
                     <div class="container">
                         <div class="ui-b-toolbar">
@@ -292,12 +355,15 @@
                                     </button>
                                 </div>
                             </div>
-                            
+
                             <div class="ui-b-toolbar-footer">
                                 <div class="tags">
                                     <span class="tag ui-b-tag"><i class="fa fa-magic mr-2"></i> [[ sortedRecommendationItems.length ]] Recommended</span>
                                     <span class="tag ui-b-tag"><i class="fa fa-sitemap mr-2"></i> [[ sortedSimilarItems.length ]] Similar</span>
                                     <span class="tag ui-b-tag"><i class="fa fa-heart-o mr-2"></i> [[ sortedLikedItems.length ]] Liked</span>
+                                    <span class="tag ui-b-tag is-info is-light" v-if="algoVariant === 'B' && sasrecAvailable">
+                                        <i class="fa fa-cubes mr-2"></i> SASRec ready
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -360,8 +426,32 @@
                         <p class="ui-b-panel-note">[[ recommendationMessage ]]</p>
                         <p class="ui-b-panel-meta">Showing [[ sortedRecommendationItems.length ]] items</p>
                         <p v-if="isRefreshing" class="ui-b-panel-meta">Refreshing...</p>
+
+                        <div class="ui-b-attention-card" v-if="algoVariant === 'B' && sasrecAvailable">
+                            <div class="ui-b-attention-head">
+                                <p><i class="fa fa-eye mr-2"></i><strong>Why these picks?</strong></p>
+                                <button class="button is-small ui-b-btn" :class="isLoadingExplain ? 'is-loading' : ''" @click="loadAttentionExplanation">
+                                    <span class="icon is-small"><i class="fa fa-magic"></i></span>
+                                    <span v-if="!attentionEvidence.length">Reveal</span>
+                                    <span v-else>Refresh</span>
+                                </button>
+                            </div>
+                            <div class="ui-b-attention-body" v-if="attentionEvidence.length">
+                                <p class="ui-b-attention-intro">SASRec attended most to these movies in your history:</p>
+                                <div class="ui-b-attention-row">
+                                    <div class="ui-b-attention-chip" v-for="entry in attentionEvidence" :key="'att-' + entry.movieId">
+                                        <img :src="entry.cover_url" @error="onImageError" alt="">
+                                        <span>[[ entry.title ]]<small v-if="entry.year"> · [[ entry.year ]]</small></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="ui-b-attention-body" v-else-if="attentionLoaded">
+                                <p class="ui-b-attention-intro">Rate a few more movies and try again to see the attended history.</p>
+                            </div>
+                        </div>
+
                         <div class="columns is-mobile is-multiline" v-if="sortedRecommendationItems.length > 0">
-                            <div class="column is-3-fullhd is-3-desktop is-3-tablet is-6-mobile" v-for="movie in sortedRecommendationItems" :key="'rec-' + movie.movieId">
+                            <div class="column is-2-fullhd is-2-desktop is-2-tablet is-6-mobile" v-for="movie in sortedRecommendationItems" :key="'rec-' + movie.movieId">
                                 <div class="card ui-b-card">
                                     <div class="card-image ui-b-card-image">
                                         <figure class="image is-4by3">
@@ -517,24 +607,63 @@
 
         <div :class="['modal', showGenres ? 'is-active' : '']">
             <div class="modal-background"></div>
-            <div class="modal-card">
-                <header class="modal-card-head">
-                    <p class="modal-card-title">Please choose any genre you're interested in.</p>
-                </header>
-                <div class="modal-card-body">
-                    <p class="mb-3">Multiple answers are possible.</p>
-                    {% for gener in genres %}
-                    <button :class="['button m-2', inGenres({{gener['id']}}) ? 'is-link' : '' ]" value="{{gener['id']}}"
-                            @click="updateGenre({{gener['id']}})">
-                        {{gener['name']}}
-                    </button>
-                    {% endfor %}
+
+            <!-- UI-A: keep original look untouched. -->
+            <template v-if="uiVariant !== 'B'">
+                <div class="modal-card">
+                    <header class="modal-card-head">
+                        <p class="modal-card-title">Please choose any genre you're interested in.</p>
+                    </header>
+                    <div class="modal-card-body">
+                        <p class="mb-3">Multiple answers are possible.</p>
+                        {% for gener in genres %}
+                        <button :class="['button m-2', inGenres({{gener['id']}}) ? 'is-link' : '' ]" value="{{gener['id']}}"
+                                @click="updateGenre({{gener['id']}})">
+                            {{gener['name']}}
+                        </button>
+                        {% endfor %}
+                    </div>
+                    <footer class="modal-card-foot">
+                        <button class="button is-link" :disabled="genres.length == 0" @click="saveGenres">Save
+                        </button>
+                    </footer>
                 </div>
-                <footer class="modal-card-foot">
-                    <button class="button is-link" :disabled="genres.length == 0" @click="saveGenres">Save
-                    </button>
-                </footer>
-            </div>
+            </template>
+
+            <!-- UI-B: friendlier hero header, chip grid, live counter. -->
+            <template v-else>
+                <div class="modal-card ui-b-genre-modal">
+                    <header class="modal-card-head ui-b-genre-head">
+                        <div>
+                            <p class="modal-card-title"><i class="fa fa-film mr-2"></i>What are you in the mood for?</p>
+                            <p class="is-size-7 has-text-grey-light mt-1">Pick the genres that excite you. We'll use them to surface a few cold-start movies for you to rate on the next step.</p>
+                        </div>
+                    </header>
+                    <div class="modal-card-body ui-b-genre-body">
+                        <p class="ui-b-genre-hint"><i class="fa fa-hand-pointer-o mr-2"></i>Tap as many as you want — at least one to continue.</p>
+                        <div class="ui-b-genre-grid">
+                            {% for gener in genres %}
+                            <button :class="['ui-b-genre-chip', inGenres({{gener['id']}}) ? 'is-active' : '']"
+                                    @click="updateGenre({{gener['id']}})">
+                                <span class="ui-b-genre-chip-icon"><i class="fa fa-tag"></i></span>
+                                <span class="ui-b-genre-chip-label">{{gener['name']}}</span>
+                                <span class="ui-b-genre-chip-check"><i class="fa fa-check"></i></span>
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <footer class="modal-card-foot ui-b-genre-foot">
+                        <span class="ui-b-genre-counter">
+                            <i class="fa fa-bookmark-o mr-2"></i>
+                            <strong>[[ genres.length ]]</strong> selected
+                        </span>
+                        <button class="button is-primary ui-b-genre-continue" :disabled="genres.length == 0" @click="saveGenres">
+                            <span>Continue</span>
+                            <span class="icon"><i class="fa fa-arrow-right"></i></span>
+                        </button>
+                    </footer>
+                </div>
+            </template>
         </div>
 
         <div :class="['modal', showMovieRate ? 'is-active' : '']">
@@ -544,6 +673,23 @@
                     <p class="modal-card-title">Please rate at least [[ ratingThreshold ]] movies.</p>
                 </header>
                 <div class="modal-card-body">
+                    <div class="ui-b-cold-start" v-if="uiVariant === 'B'">
+                        <p class="ui-b-cold-start-title"><i class="fa fa-rocket mr-2"></i>Quick start: tap the posters of movies you've watched and enjoyed.</p>
+                        <p class="ui-b-cold-start-sub">SASRec uses this list, in order, to figure out what you'll watch next. One tap = "I loved it" (5 stars).</p>
+                        <div class="ui-b-cold-start-row">
+                            <div class="ui-b-cold-start-card" v-for="movie in defaultGenreMovies" :key="'cs-' + movie.movieId"
+                                 :class="getRate(movie.movieId)[1] === 5 ? 'is-picked' : ''"
+                                 @click="quickPick(movie.movieId)">
+                                <img :src="movie.cover_url" @error="onImageError" alt="">
+                                <div class="ui-b-cold-start-overlay">
+                                    <span v-if="getRate(movie.movieId)[1] === 5"><i class="fa fa-check-circle"></i></span>
+                                    <span v-else><i class="fa fa-plus-circle"></i></span>
+                                </div>
+                                <p class="ui-b-cold-start-name">[[ movie.title ]]</p>
+                            </div>
+                        </div>
+                        <p class="ui-b-cold-start-progress">Picked [[ userRates.length ]] / [[ ratingThreshold ]]</p>
+                    </div>
                     <div class="columns is-mobile is-multiline">
                         <div class="column is-3-fullhd is-3-desktop is-3-tablet is-6-mobile" v-for="movie in defaultGenreMovies" :key="'rate-' + movie.movieId">
                             <div class="card">
@@ -599,7 +745,7 @@
 </div>
 
 <script type="module">
-    import {createApp, computed, onMounted, ref} from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js'
+    import {createApp, computed, onMounted, ref} from 'https://cdn.jsdelivr.net/npm/vue@3/dist/vue.esm-browser.prod.js'
 
     let app = createApp({
         setup() {
@@ -618,6 +764,14 @@
             const likedItems = ref({{likes | tojson}})
             const explainCards = ref({{explain_cards | tojson}})
 
+            const ratingTimeline = ref({{rating_timeline | tojson}})
+            const sasrecAvailable = ref({{sasrec_available | tojson}})
+            const diversitySlider = ref(0)
+            const recencySlider = ref(0)
+            const attentionEvidence = ref([])
+            const attentionLoaded = ref(false)
+            const isLoadingExplain = ref(false)
+
             const recommendationSort = ref('score_desc')
             const similarSort = ref('similarity_desc')
             const likedSort = ref('liked_order')
@@ -634,6 +788,18 @@
 
             const showMovieRate = ref(false)
             const userRates = ref({{user_rates | tojson}})
+
+            // Onboarding stage: 'variant' shows the variant picker (first visit + after Clean All
+            // for both UI-A and UI-B). 'done' means the variant has been confirmed and the
+            // standard genre / rating onboarding flow can run.
+            // sessionStorage 'variantPicked' survives the post-pick page navigation so the
+            // picker doesn't re-appear when the user picks a different variant.
+            const _variantAlreadyPicked = (function () {
+                try { return window.sessionStorage.getItem('variantPicked') === '1' } catch (e) { return false }
+            })()
+            const onboardingStage = ref(
+                (({{user_genres | tojson}}).length === 0 && !_variantAlreadyPicked) ? 'variant' : 'done'
+            )
 
             const userLikes = ref({{user_likes | tojson}})
 
@@ -656,8 +822,15 @@
             onMounted(() => {
                 isLoading.value = false
 
-                showGenres.value = genres.value.length === 0
-                showMovieRate.value = (genres.value.length > 0 && userRates.value.length < ratingThreshold.value)
+                // While the variant picker is up, suppress the genres / rating modals so the
+                // user picks a variant first, then proceeds with the rest of the onboarding.
+                if (onboardingStage.value === 'variant') {
+                    showGenres.value = false
+                    showMovieRate.value = false
+                } else {
+                    showGenres.value = genres.value.length === 0
+                    showMovieRate.value = (genres.value.length > 0 && userRates.value.length < ratingThreshold.value)
+                }
 
                 trackEvent('ui_rendered', {
                     genres_count: genres.value.length,
@@ -841,6 +1014,8 @@
                             user_likes: userLikes.value,
                             ui_variant: uiVariant.value,
                             algo_variant: algoVariant.value,
+                            diversity: diversitySlider.value,
+                            recency: recencySlider.value,
                         }),
                     })
 
@@ -856,10 +1031,51 @@
                     similarMessage.value = payload.likes_similar_message || 'No similar movies found.'
                     likedItems.value = payload.likes || []
                     explainCards.value = payload.explain_cards || []
+                    ratingTimeline.value = payload.rating_timeline || []
+                    sasrecAvailable.value = !!payload.sasrec_available
                 } catch (error) {
                     console.error(error)
                 } finally {
                     isRefreshing.value = false
+                }
+            }
+
+            function onSliderChanged(key, value) {
+                trackEvent('slider_changed', {
+                    filter_key: key,
+                    filter_value: String(Number(value).toFixed(2)),
+                })
+            }
+
+            function applyRerank() {
+                onSliderChanged('apply_rerank', `${diversitySlider.value}|${recencySlider.value}`)
+                refreshRecommendations()
+            }
+
+            async function loadAttentionExplanation() {
+                if (!sasrecAvailable.value) {
+                    return
+                }
+                isLoadingExplain.value = true
+                try {
+                    const response = await fetch('/api/sasrec_explain', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            user_rates: userRates.value,
+                            top_n: 3,
+                        }),
+                    })
+                    if (!response.ok) {
+                        throw new Error('Failed to load attention explanation')
+                    }
+                    const payload = await response.json()
+                    attentionEvidence.value = payload.history || []
+                    attentionLoaded.value = true
+                } catch (error) {
+                    console.error(error)
+                } finally {
+                    isLoadingExplain.value = false
                 }
             }
 
@@ -882,6 +1098,8 @@
                 minYearFilter.value = 1900
                 minScoreFilter.value = 0
                 minSimilarityFilter.value = 0
+                diversitySlider.value = 0
+                recencySlider.value = 0
 
                 onFilterChanged('reset_all', 'true')
             }
@@ -909,13 +1127,32 @@
                     similarMessage.value = 'No similar movies found.'
                     explainCards.value = []
                     defaultGenreMovies.value = []
+                    ratingTimeline.value = []
+                    attentionEvidence.value = []
+                    attentionLoaded.value = false
 
-                    showGenres.value = true
                     showMovieRate.value = false
+                    showGenres.value = false
+                    // Always return to the variant picker after a Clean All, regardless of
+                    // which UI variant the user is currently on.
+                    try { window.sessionStorage.removeItem('variantPicked') } catch (e) { /* ignore */ }
+                    onboardingStage.value = 'variant'
+                }
+            }
 
-                    if (uiVariant.value !== 'B') {
-                        reloadPage()
-                    }
+            function pickVariant(uiV, algoV) {
+                const sameVariant = (uiV === uiVariant.value && algoV === algoVariant.value)
+                trackEvent('onboarding_variant_picked', {
+                    ui_variant: uiV,
+                    algo_variant: algoV,
+                    same_variant: sameVariant ? 'true' : 'false',
+                })
+                try { window.sessionStorage.setItem('variantPicked', '1') } catch (e) { /* ignore */ }
+                if (sameVariant) {
+                    onboardingStage.value = 'done'
+                    showGenres.value = true
+                } else {
+                    window.location.assign('/?ui_variant=' + uiV + '&algo_variant=' + algoV)
                 }
             }
 
@@ -1000,6 +1237,24 @@
                 setListCookie('user_rates', userRates.value)
             }
 
+            function quickPick(movieId) {
+                const current = getRate(movieId)[1]
+                if (current === 5) {
+                    const idx = getRate(movieId)[0]
+                    if (idx > -1) {
+                        userRates.value.splice(idx, 1)
+                        setListCookie('user_rates', userRates.value)
+                    }
+                } else {
+                    updateRate(movieId, 5)
+                }
+                trackEvent('cold_start_seed_selected', {
+                    movie_id: movieId,
+                    total_ratings: userRates.value.length,
+                    rating_threshold: ratingThreshold.value,
+                })
+            }
+
             function handleRatingSave() {
                 showMovieRate.value = false
 
@@ -1066,12 +1321,16 @@
                 inGenres,
                 saveGenres,
 
+                onboardingStage,
+                pickVariant,
+
                 showMovieRate,
                 userRates,
                 defaultGenreMovies,
                 getRate,
                 updateRate,
                 handleRatingSave,
+                quickPick,
 
                 userLikes,
                 updateLike,
@@ -1102,6 +1361,17 @@
                 refreshRecommendations,
                 resolveDisplayDate,
                 onImageError,
+
+                ratingTimeline,
+                sasrecAvailable,
+                diversitySlider,
+                recencySlider,
+                attentionEvidence,
+                attentionLoaded,
+                isLoadingExplain,
+                onSliderChanged,
+                applyRerank,
+                loadAttentionExplanation,
 
                 reloadPage,
             }
@@ -1484,6 +1754,384 @@
         .ui-b-card-footer {
             padding: 0.6rem 0.8rem 0.8rem;
         }
+    }
+
+    /* Timeline visualisation */
+    .ui-b-section-timeline {
+        padding-top: 0.55rem;
+        padding-bottom: 0.15rem;
+    }
+
+    .ui-b-timeline-card {
+        background: var(--ui-b-surface);
+        border: 1px solid var(--ui-b-border);
+        border-radius: 18px;
+        box-shadow: var(--ui-b-shadow);
+        padding: 1rem 1rem 1.1rem;
+    }
+
+    .ui-b-timeline-head {
+        margin-bottom: 0.7rem;
+    }
+
+    .ui-b-timeline-sub {
+        font-size: 0.78rem;
+        color: var(--ui-b-muted);
+        margin-top: 0.1rem;
+    }
+
+    .ui-b-timeline-track {
+        display: flex;
+        gap: 0.65rem;
+        overflow-x: auto;
+        padding: 0.15rem 0.1rem 0.6rem;
+        scroll-behavior: smooth;
+    }
+
+    .ui-b-timeline-track::-webkit-scrollbar {
+        height: 6px;
+    }
+    .ui-b-timeline-track::-webkit-scrollbar-thumb {
+        background: #c5cdc6;
+        border-radius: 6px;
+    }
+
+    .ui-b-timeline-item {
+        flex: 0 0 110px;
+        text-align: center;
+    }
+
+    .ui-b-timeline-poster {
+        position: relative;
+        width: 110px;
+        height: 150px;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid var(--ui-b-border);
+    }
+
+    .ui-b-timeline-poster img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .ui-b-timeline-rating {
+        position: absolute;
+        bottom: 6px;
+        right: 6px;
+        background: rgba(31, 43, 39, 0.78);
+        color: #fff;
+        font-size: 0.7rem;
+        padding: 1px 6px;
+        border-radius: 999px;
+    }
+
+    .ui-b-timeline-title {
+        margin-top: 0.4rem;
+        font-size: 0.74rem;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: var(--ui-b-text);
+    }
+
+    .ui-b-timeline-meta {
+        font-size: 0.68rem;
+        color: var(--ui-b-muted);
+    }
+
+    /* Diversity / recency rerank row */
+    .ui-b-rerank-row {
+        margin-top: 0.4rem;
+        padding-top: 0.6rem;
+        border-top: 1px dashed #e3e9e3;
+    }
+
+    .ui-b-range-hint {
+        color: #97a09a;
+    }
+
+    /* Attention explanation card */
+    .ui-b-attention-card {
+        background: var(--ui-b-surface-soft);
+        border: 1px solid var(--ui-b-border);
+        border-radius: 14px;
+        padding: 0.75rem 0.95rem;
+        margin: 0.5rem 0 1rem;
+    }
+
+    .ui-b-attention-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .ui-b-attention-intro {
+        font-size: 0.78rem;
+        color: var(--ui-b-muted);
+        margin: 0.5rem 0 0.45rem;
+    }
+
+    .ui-b-attention-row {
+        display: flex;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+    }
+
+    .ui-b-attention-chip {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: var(--ui-b-surface);
+        border: 1px solid var(--ui-b-border);
+        border-radius: 999px;
+        padding: 0.3rem 0.65rem 0.3rem 0.3rem;
+    }
+
+    .ui-b-attention-chip img {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    .ui-b-attention-chip span {
+        font-size: 0.78rem;
+        color: var(--ui-b-text);
+    }
+
+    .ui-b-attention-chip small {
+        color: var(--ui-b-muted);
+    }
+
+    /* Cold-start poster picker */
+    .ui-b-cold-start {
+        background: linear-gradient(135deg, #f5f8f5 0%, #ebf1ec 100%);
+        border-radius: 14px;
+        padding: 0.85rem 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .ui-b-cold-start-title {
+        font-weight: 600;
+        font-size: 0.95rem;
+        margin-bottom: 0.2rem;
+    }
+
+    .ui-b-cold-start-sub {
+        font-size: 0.78rem;
+        color: var(--ui-b-muted, #65716a);
+        margin-bottom: 0.6rem;
+    }
+
+    .ui-b-cold-start-row {
+        display: flex;
+        gap: 0.6rem;
+        overflow-x: auto;
+        padding-bottom: 0.5rem;
+    }
+
+    /* UI-B genre modal */
+    .ui-b-genre-modal {
+        max-width: 720px;
+        width: calc(100% - 2rem);
+        border-radius: 18px;
+        overflow: hidden;
+        box-shadow: 0 24px 60px rgba(15, 60, 35, 0.25);
+    }
+
+    .ui-b-genre-head {
+        background: linear-gradient(135deg, #1f7a4d 0%, #38b27a 100%);
+        color: #fff;
+        border-bottom: none;
+        padding: 1.4rem 1.6rem;
+    }
+
+    .ui-b-genre-head .modal-card-title {
+        color: #fff;
+        font-size: 1.25rem;
+    }
+
+    .ui-b-genre-head .has-text-grey-light {
+        color: rgba(255, 255, 255, 0.85) !important;
+    }
+
+    .ui-b-genre-body {
+        background: #f7faf7;
+        padding: 1.4rem 1.6rem;
+    }
+
+    .ui-b-genre-hint {
+        font-size: 0.85rem;
+        color: #5e6b62;
+        margin-bottom: 1rem;
+    }
+
+    .ui-b-genre-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.55rem;
+    }
+
+    .ui-b-genre-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.55rem 1rem;
+        border-radius: 999px;
+        border: 1.5px solid #d6e3da;
+        background: #ffffff;
+        color: #2f4a3a;
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .ui-b-genre-chip:hover {
+        border-color: #38b27a;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px rgba(56, 178, 122, 0.18);
+    }
+
+    .ui-b-genre-chip .ui-b-genre-chip-check {
+        display: none;
+    }
+
+    .ui-b-genre-chip.is-active {
+        background: linear-gradient(135deg, #1f7a4d 0%, #38b27a 100%);
+        color: #fff;
+        border-color: transparent;
+        box-shadow: 0 6px 14px rgba(31, 122, 77, 0.3);
+    }
+
+    .ui-b-genre-chip.is-active .ui-b-genre-chip-icon {
+        display: none;
+    }
+
+    .ui-b-genre-chip.is-active .ui-b-genre-chip-check {
+        display: inline-flex;
+    }
+
+    .ui-b-genre-foot {
+        background: #fff;
+        border-top: 1px solid #e2ece5;
+        padding: 1rem 1.6rem;
+        justify-content: space-between !important;
+        align-items: center;
+    }
+
+    .ui-b-genre-counter {
+        font-size: 0.9rem;
+        color: #4d5b53;
+    }
+
+    .ui-b-genre-counter strong {
+        color: #1f7a4d;
+    }
+
+    .ui-b-genre-continue {
+        background: linear-gradient(135deg, #1f7a4d 0%, #38b27a 100%);
+        border: none;
+        color: #fff;
+        font-weight: 600;
+        padding: 0 1.4rem;
+        height: 2.5em;
+        border-radius: 999px;
+    }
+
+    .ui-b-genre-continue[disabled] {
+        background: #c5d2cb;
+        opacity: 0.7;
+    }
+
+    .ui-b-genre-continue:not([disabled]):hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 18px rgba(31, 122, 77, 0.3);
+    }
+
+    /* UI-B variant picker cards */
+    .ui-b-variant-picker .ui-b-variant-card {
+        display: block;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        border: 1.5px solid #e2ece5;
+    }
+
+    .ui-b-variant-picker .ui-b-variant-card:hover {
+        transform: translateY(-2px);
+        border-color: #38b27a;
+        box-shadow: 0 10px 24px rgba(31, 122, 77, 0.18);
+    }
+
+    .ui-b-variant-picker .ui-b-variant-card-recommended {
+        border-color: #38b27a;
+        background: linear-gradient(180deg, #f1faf4 0%, #ffffff 100%);
+    }
+
+
+    .ui-b-cold-start-card {
+        position: relative;
+        flex: 0 0 110px;
+        cursor: pointer;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 2px solid transparent;
+        transition: transform 0.18s ease, border-color 0.18s ease;
+    }
+
+    .ui-b-cold-start-card:hover {
+        transform: translateY(-2px);
+    }
+
+    .ui-b-cold-start-card.is-picked {
+        border-color: #4f5e57;
+        box-shadow: 0 6px 14px rgba(31, 43, 39, 0.18);
+    }
+
+    .ui-b-cold-start-card img {
+        width: 110px;
+        height: 150px;
+        object-fit: cover;
+        display: block;
+    }
+
+    .ui-b-cold-start-overlay {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        background: rgba(255, 255, 255, 0.92);
+        border-radius: 50%;
+        width: 26px;
+        height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #4f5e57;
+    }
+
+    .ui-b-cold-start-card.is-picked .ui-b-cold-start-overlay {
+        background: #4f5e57;
+        color: #fff;
+    }
+
+    .ui-b-cold-start-name {
+        font-size: 0.72rem;
+        padding: 4px 6px;
+        background: rgba(255, 255, 255, 0.92);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .ui-b-cold-start-progress {
+        font-size: 0.78rem;
+        color: var(--ui-b-muted, #65716a);
+        margin-top: 0.3rem;
+        text-align: right;
     }
 </style>
 </body>

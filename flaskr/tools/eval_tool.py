@@ -4,7 +4,18 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from surprise import Dataset, KNNWithMeans, Reader, SVD
+
+# scikit-surprise is optional: in environments where it can't load (e.g. a
+# Windows app-control policy blocking the compiled .pyd files), we still want
+# the SASRec evaluation row to run.
+try:
+    from surprise import Dataset, KNNWithMeans, Reader, SVD
+    _SURPRISE_AVAILABLE = True
+    _SURPRISE_ERROR = None
+except Exception as _exc:  # pragma: no cover
+    _SURPRISE_AVAILABLE = False
+    _SURPRISE_ERROR = str(_exc)
+    Dataset = KNNWithMeans = Reader = SVD = None  # type: ignore
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -190,6 +201,48 @@ def evaluate_content_based(train_df, test_df, movies_df, k, rating_threshold, mo
     return metrics
 
 
+def evaluate_sasrec(train_df, test_df, k, rating_threshold):
+    """Evaluate the SASRec checkpoint produced by `train_sasrec` on the same time-split.
+
+    Builds each user's chronological history from `train_df`, asks SASRec to rank all items,
+    and computes Precision/Recall/NDCG@K against the held-out positives in `test_df`.
+    """
+    from . import sasrec_tool
+
+    if not sasrec_tool.is_available():
+        raise RuntimeError(sasrec_tool.status_message())
+
+    test_relevant_by_user = (
+        test_df[test_df['rating'] >= rating_threshold]
+        .groupby('userId')['movieId']
+        .apply(set)
+        .to_dict()
+    )
+
+    metrics = []
+    for user_id, relevant_items in test_relevant_by_user.items():
+        if not relevant_items:
+            continue
+        history = (
+            train_df[train_df['userId'] == user_id]
+            .sort_values('timestamp')['movieId']
+            .astype(int)
+            .tolist()
+        )
+        if not history:
+            continue
+        ranked_pairs = sasrec_tool.recommend_for_sequence(
+            history,
+            top_k=k,
+            exclude_movie_ids=history,
+        )
+        if not ranked_pairs:
+            continue
+        ranked = [int(mid) for mid, _ in ranked_pairs]
+        metrics.append(precision_recall_ndcg_at_k(ranked, relevant_items, k))
+    return metrics
+
+
 def summarize_metrics(metrics):
     if not metrics:
         return 0.0, 0.0, 0.0, 0
@@ -225,9 +278,23 @@ def evaluate_all(data_dir, k, rating_threshold, min_interactions, test_ratio, ma
 
     evaluations = []
 
-    for algorithm_name in ['knn', 'mf_svd']:
-        cf_metrics = evaluate_cf(train_df, test_df, all_movie_ids, k, rating_threshold, algorithm_name)
-        precision, recall, ndcg, users = summarize_metrics(cf_metrics)
+    if _SURPRISE_AVAILABLE:
+        for algorithm_name in ['knn', 'mf_svd']:
+            cf_metrics = evaluate_cf(train_df, test_df, all_movie_ids, k, rating_threshold, algorithm_name)
+            precision, recall, ndcg, users = summarize_metrics(cf_metrics)
+            evaluations.append({
+                'algorithm': algorithm_name,
+                'precision_at_k': precision,
+                'recall_at_k': recall,
+                'ndcg_at_k': ndcg,
+                'users_evaluated': users,
+            })
+    else:
+        print(f'[eval_tool] Skipping KNN / SVD: scikit-surprise unavailable ({_SURPRISE_ERROR}).')
+
+    for algorithm_name, mode in [('content_multi_hot', 'multi_hot'), ('content_tfidf', 'tfidf')]:
+        content_metrics = evaluate_content_based(train_df, test_df, movies_df, k, rating_threshold, mode=mode)
+        precision, recall, ndcg, users = summarize_metrics(content_metrics)
         evaluations.append({
             'algorithm': algorithm_name,
             'precision_at_k': precision,
@@ -236,11 +303,16 @@ def evaluate_all(data_dir, k, rating_threshold, min_interactions, test_ratio, ma
             'users_evaluated': users,
         })
 
-    for algorithm_name, mode in [('content_multi_hot', 'multi_hot'), ('content_tfidf', 'tfidf')]:
-        content_metrics = evaluate_content_based(train_df, test_df, movies_df, k, rating_threshold, mode=mode)
-        precision, recall, ndcg, users = summarize_metrics(content_metrics)
+    # Optional SASRec evaluation. Skipped silently if torch / recbole / checkpoint are missing.
+    try:
+        sasrec_metrics = evaluate_sasrec(train_df, test_df, k, rating_threshold)
+    except Exception as exc:
+        print(f"[eval_tool] Skipping SASRec: {exc}")
+        sasrec_metrics = None
+    if sasrec_metrics is not None:
+        precision, recall, ndcg, users = summarize_metrics(sasrec_metrics)
         evaluations.append({
-            'algorithm': algorithm_name,
+            'algorithm': 'sasrec',
             'precision_at_k': precision,
             'recall_at_k': recall,
             'ndcg_at_k': ndcg,

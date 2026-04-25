@@ -29,3 +29,11 @@ tzdata==2023.3
 urllib3==2.1.0
 watchdog==3.0.0
 Werkzeug==3.0.1
+
+# Optional — needed only for the SASRec-enabled Algo Variant B.
+# Recommended: install via `conda env create -f environment_sas.yml` instead of pip,
+# because RecBole has many transitive deps that conda resolves more reliably.
+# torch==2.4.1
+# recbole==1.2.1
+# tensorboard==2.20.0
+# pyyaml==6.0.3
