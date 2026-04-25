@@ -34,6 +34,26 @@ def healthz():
     return 'ok', 200
 
 
+@bp.route('/admin/events')
+def download_events():
+    """Password-protected download of the A/B event log.
+
+    Usage: GET /admin/events?token=<ADMIN_TOKEN>
+    The token is read from the ADMIN_TOKEN env var on Render. Returns the raw
+    JSONL so it can be piped to analysis scripts. Render Free has no persistent
+    disk, so download often during the experiment.
+    """
+    from flask import abort, send_file, current_app as app
+    expected = os.environ.get('ADMIN_TOKEN')
+    if not expected or request.args.get('token') != expected:
+        abort(403)
+    path = os.path.join(app.root_path, 'static', 'ml_data', 'ab_events.jsonl')
+    if not os.path.exists(path):
+        return 'no events yet', 404
+    return send_file(path, mimetype='application/x-ndjson',
+                     as_attachment=True, download_name='ab_events.jsonl')
+
+
 movies, genres, rates = loadData()
 
 # Load full ratings (with timestamp) for sequence construction.
