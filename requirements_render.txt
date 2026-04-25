@@ -48,5 +48,8 @@ pyyaml==6.0.1
 tensorboard==2.16.2
 
 # --- Classic CF (Algo Variant A) ---
-# scikit-surprise needs build tools on Linux but Render base image has them
-scikit-surprise==1.1.3
+# scikit-surprise has no manylinux wheel on PyPI and source build fails on
+# Render's isolated build env. We disable it here; main.py automatically falls
+# back to genre-affinity + Bayesian-smoothed popularity (see
+# _recommend_without_surprise) which is shown to the user with a clear message.
+# scikit-surprise==1.1.3
