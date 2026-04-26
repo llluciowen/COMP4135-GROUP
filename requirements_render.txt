@@ -11,6 +11,10 @@ itsdangerous==2.1.2
 click==8.1.7
 blinker==1.7.0
 
+# --- Build tooling required at runtime by recbole (pkg_resources) ---
+setuptools==69.0.3
+wheel==0.42.0
+
 # --- Scraping (used by scrape.py) ---
 requests==2.31.0
 lxml==4.9.3
