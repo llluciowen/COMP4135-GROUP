@@ -66,8 +66,10 @@ def _ensure_loaded() -> bool:
             return False
 
         try:
-            import torch  # noqa: F401
-            from recbole.quick_start import load_data_and_model
+            import torch
+            from recbole.config import Config
+            from recbole.data import create_dataset, data_preparation
+            from recbole.utils import get_model, init_seed
         except ImportError as exc:
             _state['load_error'] = (
                 f'PyTorch / RecBole not installed in this environment ({exc}). '
@@ -76,7 +78,32 @@ def _ensure_loaded() -> bool:
             return False
 
         try:
-            config, model, dataset, _train, _valid, _test = load_data_and_model(model_file=str(ckpt))
+            # Manually replicate recbole.quick_start.load_data_and_model so we can
+            # normalise path-like config keys. The checkpoint was pickled on the
+            # OS where training happened (Windows here), so paths embedded inside
+            # may use backslashes that break os.path.join on Linux (Render).
+            checkpoint = torch.load(str(ckpt), map_location='cpu', weights_only=False)
+            config = checkpoint['config']
+            # Force fresh, OS-correct paths under the current project root.
+            # RecBole 1.2.1 looks for `<data_path>/<dataset>.inter` directly
+            # (the dataset name is appended to data_path as the .inter prefix,
+            # not as an extra subdirectory), so data_path must point at the
+            # folder that *contains* ml-demo.inter.
+            config['data_path'] = str(SASREC_DIR / 'data' / 'ml-demo')
+            config['checkpoint_dir'] = str(SASREC_DIR / 'saved')
+            config['dataset'] = 'ml-demo'
+            # CPU-only on Render
+            config['device'] = torch.device('cpu')
+            config['use_gpu'] = False
+
+            init_seed(config['seed'], config['reproducibility'])
+            dataset = create_dataset(config)
+            train_data, _valid, _test = data_preparation(config, dataset)
+            model = get_model(config['model'])(config, train_data._dataset).to(config['device'])
+            model.load_state_dict(checkpoint['state_dict'])
+            other = checkpoint.get('other_parameter')
+            if other:
+                model.load_other_parameter(other)
         except Exception as exc:
             _state['load_error'] = f'Failed to load SASRec checkpoint {ckpt}: {exc}'
             return False
