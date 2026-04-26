@@ -1,0 +1,6 @@
+test,group_a,n_a,mean_a,group_b,n_b,mean_b,U,p_value,significant
+Experiment 1: Algorithm (UI=A) — like_rate,UI=A Algo=A (KNN),13,2.154,UI=A Algo=B (SASRec),17,0.941,124.0,0.4021,no
+Experiment 1: Algorithm (UI=A) — likes count,UI=A Algo=A (KNN),13,2.154,UI=A Algo=B (SASRec),17,0.941,124.0,0.4021,no
+Experiment 2: UI (Algo=B) — likes count,UI=A Algo=B,17,0.941,UI=B Algo=B,14,3.000,97.5,0.2268,no
+Experiment 2: UI (Algo=B) — duration_s,UI=A Algo=B,17,35499.691,UI=B Algo=B,14,43557.984,83.0,0.1537,no
+Experiment 2: UI (Algo=B) — filters used,UI=A Algo=B,17,0.000,UI=B Algo=B,14,5.500,85.0,0.0225,YES

@@ -12,6 +12,7 @@ Outputs to stdout:
 """
 from __future__ import annotations
 
+import csv
 import json
 import sys
 from collections import defaultdict
@@ -111,22 +112,40 @@ def print_table(rows: list[tuple]):
         print('  ' + '  '.join(str(c).ljust(widths[i]) for i, c in enumerate(r)))
 
 
+TEST_RESULTS: list[dict] = []
+
+
 def run_test(name: str, group_a: list[float], group_b: list[float], label_a: str, label_b: str):
     print(f"\n=== {name} ===")
-    print(f"  {label_a}: n={len(group_a)} mean={sum(group_a)/max(len(group_a),1):.3f}")
-    print(f"  {label_b}: n={len(group_b)} mean={sum(group_b)/max(len(group_b),1):.3f}")
+    mean_a = sum(group_a) / max(len(group_a), 1)
+    mean_b = sum(group_b) / max(len(group_b), 1)
+    print(f"  {label_a}: n={len(group_a)} mean={mean_a:.3f}")
+    print(f"  {label_b}: n={len(group_b)} mean={mean_b:.3f}")
+    row = {
+        'test': name,
+        'group_a': label_a, 'n_a': len(group_a), 'mean_a': f"{mean_a:.3f}",
+        'group_b': label_b, 'n_b': len(group_b), 'mean_b': f"{mean_b:.3f}",
+        'U': '', 'p_value': '', 'significant': '',
+    }
     if mannwhitneyu is None:
         print('  (install scipy to get p-values: pip install scipy)')
-        return
-    if len(group_a) < 2 or len(group_b) < 2:
+        row['p_value'] = 'scipy not installed'
+    elif len(group_a) < 2 or len(group_b) < 2:
         print('  (need >=2 users per group for stats test)')
-        return
-    try:
-        stat, p = mannwhitneyu(group_a, group_b, alternative='two-sided')
-        print(f"  Mann-Whitney U={stat:.1f}  p={p:.4f}  "
-              f"{'**SIGNIFICANT**' if p < 0.05 else '(not significant)'}")
-    except ValueError as exc:
-        print(f"  test failed: {exc}")
+        row['p_value'] = 'n<2'
+    else:
+        try:
+            stat, p = mannwhitneyu(group_a, group_b, alternative='two-sided')
+            sig = p < 0.05
+            print(f"  Mann-Whitney U={stat:.1f}  p={p:.4f}  "
+                  f"{'**SIGNIFICANT**' if sig else '(not significant)'}")
+            row['U'] = f"{stat:.1f}"
+            row['p_value'] = f"{p:.4f}"
+            row['significant'] = 'YES' if sig else 'no'
+        except ValueError as exc:
+            print(f"  test failed: {exc}")
+            row['p_value'] = f"error: {exc}"
+    TEST_RESULTS.append(row)
 
 
 def main():
@@ -186,6 +205,44 @@ def main():
     run_test('Experiment 2: UI (Algo=B) — filters used',
              metric(('A', 'B'), 'filters'), metric(('B', 'B'), 'filters'),
              'UI=A Algo=B', 'UI=B Algo=B')
+
+    # ---- Save outputs ----
+    out_dir = path.parent / 'ab_analysis_results'
+    out_dir.mkdir(exist_ok=True)
+
+    cohort_csv = out_dir / 'cohort_summary.csv'
+    with cohort_csv.open('w', newline='', encoding='utf-8') as f:
+        w = csv.writer(f)
+        w.writerow(headers)
+        for r in rows[1:]:
+            w.writerow(r)
+
+    tests_csv = out_dir / 'ab_test_results.csv'
+    with tests_csv.open('w', newline='', encoding='utf-8') as f:
+        if TEST_RESULTS:
+            w = csv.DictWriter(f, fieldnames=list(TEST_RESULTS[0].keys()))
+            w.writeheader()
+            w.writerows(TEST_RESULTS)
+
+    # Per-user raw metrics for further analysis / merging with survey data
+    peruser_csv = out_dir / 'per_user_metrics.csv'
+    with peruser_csv.open('w', newline='', encoding='utf-8') as f:
+        w = csv.writer(f)
+        w.writerow(['ab_seed', 'ui_variant', 'algo_variant',
+                    'events', 'ratings', 'likes', 'refreshes', 'filters',
+                    'explanations', 'ctr_proxy', 'like_rate', 'duration_s'])
+        for (seed, ui, algo), evs in by_user.items():
+            m = compute_user_metrics(evs)
+            w.writerow([seed, ui, algo,
+                        m['events'], m['ratings'], m['likes'], m['refreshes'],
+                        m['filters'], m['explanations'],
+                        f"{m['ctr_proxy']:.4f}", f"{m['like_rate']:.4f}",
+                        f"{m['duration_s']:.1f}"])
+
+    print(f"\n========== Saved ==========")
+    print(f"  {cohort_csv}")
+    print(f"  {tests_csv}")
+    print(f"  {peruser_csv}")
 
 
 if __name__ == '__main__':
