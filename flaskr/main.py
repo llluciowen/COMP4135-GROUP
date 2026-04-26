@@ -97,7 +97,6 @@ VALID_EVENT_NAMES = {
     'sort_changed',
     'rating_modal_saved',
     'filter_changed',
-    'slider_changed',
     'cold_start_seed_selected',
     'attention_explanation_viewed',
     'onboarding_variant_picked',
@@ -226,15 +225,9 @@ def build_explain_cards(user_genres, user_rates, user_likes, ui_variant, algo_va
     ]
 
 
-def compute_recommendation_payload(user_genres, user_rates, user_likes, ui_variant, algo_variant,
-                                   diversity=0.0, recency=0.0):
+def compute_recommendation_payload(user_genres, user_rates, user_likes, ui_variant, algo_variant):
     default_genres_movies = getMoviesByGenres(user_genres)[:10]
     recommendations_movies, recommendations_message = getRecommendationBy(user_rates, algo_variant=algo_variant)
-
-    if algo_variant == 'B' and (diversity > 0.0 or recency > 0.0) and recommendations_movies:
-        recommendations_movies = sasrec_tool.diversity_rerank(
-            recommendations_movies, diversity=diversity, recency=recency
-        )
 
     liked_movie_ids = [int(raw_id) for raw_id in user_likes if str(raw_id).isdigit()]
     likes_similar_movies, likes_similar_message = getLikedSimilarBy(liked_movie_ids, algo_variant=algo_variant)
@@ -339,12 +332,8 @@ def recommendations_api():
     if algo_variant is None:
         algo_variant = get_active_algo_variant()
 
-    diversity = max(0.0, min(1.0, coerce_float(payload.get('diversity'), 0.0) or 0.0))
-    recency = max(0.0, min(1.0, coerce_float(payload.get('recency'), 0.0) or 0.0))
-
     result_payload = compute_recommendation_payload(
         user_genres, user_rates, user_likes, ui_variant, algo_variant,
-        diversity=diversity, recency=recency,
     )
     result_payload['rating_threshold'] = RATING_THRESHOLD_BY_UI.get(ui_variant, 10)
 
@@ -355,8 +344,6 @@ def recommendations_api():
         'ratings_count': len(user_rates),
         'likes_count': len(user_likes),
         'rating_threshold': result_payload['rating_threshold'],
-        'diversity': diversity,
-        'recency': recency,
     })
 
     return result_payload, 200

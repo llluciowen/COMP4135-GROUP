@@ -107,7 +107,7 @@
                             <div class="column is-6-desktop is-12-mobile">
                                 <a class="box ui-b-variant-card ui-b-variant-card-recommended" @click="pickVariant('B', 'B')">
                                     <p class="has-text-weight-bold"><span class="tag is-info mr-2">B</span><span class="tag is-success mr-2">B</span> Improved UI + SASRec <span class="tag is-warning is-light ml-2">recommended</span></p>
-                                    <p class="is-size-7 has-text-grey mt-1">The full innovation: SASRec recommendations plus the diversity/recency rerank, the "Why these picks?" attention card, and the cold-start poster picker.</p>
+                                    <p class="is-size-7 has-text-grey mt-1">The full innovation: SASRec recommendations plus the "Why these picks?" attention card and the cold-start poster picker.</p>
                                 </a>
                             </div>
                         </div>
@@ -766,8 +766,6 @@
 
             const ratingTimeline = ref({{rating_timeline | tojson}})
             const sasrecAvailable = ref({{sasrec_available | tojson}})
-            const diversitySlider = ref(0)
-            const recencySlider = ref(0)
             const attentionEvidence = ref([])
             const attentionLoaded = ref(false)
             const isLoadingExplain = ref(false)
@@ -1014,8 +1012,6 @@
                             user_likes: userLikes.value,
                             ui_variant: uiVariant.value,
                             algo_variant: algoVariant.value,
-                            diversity: diversitySlider.value,
-                            recency: recencySlider.value,
                         }),
                     })
 
@@ -1038,18 +1034,6 @@
                 } finally {
                     isRefreshing.value = false
                 }
-            }
-
-            function onSliderChanged(key, value) {
-                trackEvent('slider_changed', {
-                    filter_key: key,
-                    filter_value: String(Number(value).toFixed(2)),
-                })
-            }
-
-            function applyRerank() {
-                onSliderChanged('apply_rerank', `${diversitySlider.value}|${recencySlider.value}`)
-                refreshRecommendations()
             }
 
             async function loadAttentionExplanation() {
@@ -1098,8 +1082,6 @@
                 minYearFilter.value = 1900
                 minScoreFilter.value = 0
                 minSimilarityFilter.value = 0
-                diversitySlider.value = 0
-                recencySlider.value = 0
 
                 onFilterChanged('reset_all', 'true')
             }
@@ -1364,13 +1346,9 @@
 
                 ratingTimeline,
                 sasrecAvailable,
-                diversitySlider,
-                recencySlider,
                 attentionEvidence,
                 attentionLoaded,
                 isLoadingExplain,
-                onSliderChanged,
-                applyRerank,
                 loadAttentionExplanation,
 
                 reloadPage,
@@ -1840,17 +1818,6 @@
     .ui-b-timeline-meta {
         font-size: 0.68rem;
         color: var(--ui-b-muted);
-    }
-
-    /* Diversity / recency rerank row */
-    .ui-b-rerank-row {
-        margin-top: 0.4rem;
-        padding-top: 0.6rem;
-        border-top: 1px dashed #e3e9e3;
-    }
-
-    .ui-b-range-hint {
-        color: #97a09a;
     }
 
     /* Attention explanation card */

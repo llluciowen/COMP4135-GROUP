@@ -63,9 +63,9 @@ This demo supports stable A/B assignment using cookies.
 - UI Variant A: original UI, rating threshold = 10
 - UI Variant B: improved UI with onboarding progress, rating threshold = 5, async
   partial refresh, explanation cards, sorting controls, filter toolbar, tabbed
-  sections, **a chronological rating timeline**, **diversity / recency rerank
-  sliders**, **a SASRec attention-based "Why these picks?" panel**, and a
-  **cold-start poster picker** that lets users tap movies they've watched.
+  sections, **a chronological rating timeline**, **a SASRec attention-based
+  "Why these picks?" panel**, and a **cold-start poster picker** that lets users
+  tap movies they've watched.
 - Algo Variant A: user-based k-NN (KNNWithMeans) + genre multi-hot content
 - Algo Variant B: **SASRec (sequential Transformer)** + TF-IDF content
   (falls back to MF/SVD if SASRec is unavailable)
@@ -88,8 +88,7 @@ Experiment events are appended to:
 
 Tracked events include page view, UI rendered, genres saved, rating updates,
 onboarding completion, like toggles, clean-all actions, sort and filter changes,
-**slider changes (diversity/recency)**, **cold-start poster picks**, and
-**attention-explanation views**.
+**cold-start poster picks**, and **attention-explanation views**.
 
 ## Offline evaluation (Precision@K / Recall@K / NDCG@K)
 Run the evaluation tool to compare KNN, MF, multi-hot, TF-IDF, and SASRec:
